@@ -1,14 +1,16 @@
-// Notification bell, backed by swaync. Left toggles the centre, right toggles DND.
+// Notification bell. Left opens the centre, right toggles DND.
 
 import QtQuick
 import qs.config
 import qs.components
+import qs.popouts
 import qs.services
 
 Item {
     id: root
 
     property var bar: null
+    readonly property bool popoutOpen: Popouts.isOpen("notifications", root.bar?.screen)
 
     implicitWidth: button.implicitWidth
     implicitHeight: Theme.pillHeight
@@ -17,6 +19,7 @@ Item {
         id: button
         anchors.fill: parent
         icon: Notifications.dnd ? Icons.bellDnd : Icons.bell
+        active: root.popoutOpen
         colour: Notifications.dnd ? Theme.muted : Theme.accentBright
         tooltip: {
             if (Notifications.dnd)
@@ -26,11 +29,12 @@ Item {
             return "Notifications  ·  right-click for DND";
         }
 
-        onClicked: Notifications.toggle()
+        onClicked: Popouts.toggle("notifications", root.bar?.screen)
         onRightClicked: Notifications.toggleDnd()
 
-        // Unread dot rather than a number: the count is in the tooltip, and a bare
-        // dot keeps the bar's right edge from reflowing as notifications arrive.
+        // Unread dot rather than a number: the count is in the tooltip and in the
+        // centre's header, and a bare dot keeps the bar's right edge from
+        // reflowing as notifications arrive.
         Rectangle {
             visible: Notifications.count > 0 && !Notifications.dnd
             anchors.right: parent.right
@@ -40,7 +44,7 @@ Item {
             width: 7
             height: 7
             radius: 3.5
-            color: Theme.red
+            color: Notifications.hasCritical ? Theme.red : Theme.accentLight
             border.width: 1
             border.color: Theme.bgDeep
 
@@ -60,5 +64,10 @@ Item {
                 }
             }
         }
+    }
+
+    NotificationPopout {
+        anchorItem: root
+        shouldOpen: root.popoutOpen
     }
 }

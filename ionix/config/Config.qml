@@ -93,7 +93,11 @@ Singleton {
                 criticalAt: 15
             },
             notifications: {
-                client: "swaync"
+                popups: true,
+                timeout: 5000,      // ms a toast stays up; critical ones never expire
+                maxPopups: 3,
+                width: 380,
+                monitor: ""         // "" follows the focused monitor
             },
             osd: {
                 enabled: true,
