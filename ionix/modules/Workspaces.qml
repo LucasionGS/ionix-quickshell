@@ -13,15 +13,26 @@ Item {
     property var bar: null
     readonly property var monitor: root.bar?.screen ? Hyprland.monitorFor(root.bar.screen) : null
 
-    // Hyprland only reports workspaces that exist. Pad the list out to
-    // `persistent` so the bar doesn't reflow every time a workspace empties.
+    // Only this monitor's workspaces. Hyprland hands a workspace to whichever
+    // monitor it was created on, so without a filter every bar shows every
+    // workspace and clicking one yanks it to another screen.
+    //
+    // IDs are a single pool shared across monitors and are therefore sparse per
+    // monitor (one screen may own 2, 5 and 8). That is why `persistent` padding is
+    // off by default: with dynamically assigned workspaces there is no such thing
+    // as "this monitor's empty workspace 4" — the ID belongs to whichever screen
+    // creates it first. Set `persistent` only alongside per-monitor workspace
+    // rules (nwg-displays writes them to ~/.config/hypr/workspaces.lua), where a
+    // fixed range really does belong to one monitor.
     readonly property var items: {
+        const monitorName = root.monitor?.name ?? "";
+
         const live = Hyprland.workspaces.values.filter(w => {
             if (w.id < 0)
                 return false;      // special workspaces
-            if (Config.workspaces.activeOnly && (!root.monitor || w.monitor !== root.monitor))
+            if (monitorName === "")
                 return false;
-            return true;
+            return w.monitor?.name === monitorName;
         });
 
         const byId = {};
@@ -30,26 +41,30 @@ Item {
 
         const result = [];
         const persistent = Config.workspaces.persistent;
-        const maxId = live.reduce((m, w) => Math.max(m, w.id), 0);
+        const ids = live.map(w => w.id).sort((a, b) => a - b);
 
-        for (let i = 1; i <= Math.max(persistent, maxId); i++) {
-            const w = byId[i];
-            if (w)
-                result.push({
-                    id: i,
-                    workspace: w,
-                    occupied: w.toplevels.values.length > 0,
-                    active: w.active,
-                    urgent: w.urgent
-                });
-            else if (i <= persistent && Config.workspaces.showEmpty)
-                result.push({
-                    id: i,
-                    workspace: null,
-                    occupied: false,
-                    active: false,
-                    urgent: false
-                });
+        // Pad only up to `persistent`, and only with IDs no other monitor already
+        // owns, so a padded slot can never duplicate a workspace shown elsewhere.
+        if (persistent > 0 && Config.workspaces.showEmpty) {
+            const takenElsewhere = {};
+            for (const w of Hyprland.workspaces.values)
+                if (w.id > 0 && w.monitor?.name !== monitorName)
+                    takenElsewhere[w.id] = true;
+
+            for (let i = 1; i <= persistent; i++)
+                if (!byId[i] && !takenElsewhere[i])
+                    ids.push(i);
+        }
+
+        for (const id of [...new Set(ids)].sort((a, b) => a - b)) {
+            const w = byId[id];
+            result.push({
+                id: id,
+                workspace: w ?? null,
+                occupied: w ? w.toplevels.values.length > 0 : false,
+                active: w ? w.active : false,
+                urgent: w ? w.urgent : false
+            });
         }
         return result;
     }
