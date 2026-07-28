@@ -1,8 +1,8 @@
 // System tray.
 //
-// Right-click opens the item's DBus menu through QsMenuAnchor, which renders it
-// as a native-feeling menu; we don't try to restyle it, because DBusMenu content
-// is arbitrary and a half-styled menu looks worse than an unstyled one.
+// Left click activates, middle click runs the secondary action, right click opens
+// the item's DBus menu — drawn by TrayMenu in the shell's own theme rather than by
+// QsMenuAnchor's unstyled platform menu.
 
 import QtQuick
 import Quickshell
@@ -34,13 +34,15 @@ Item {
                 id: entry
                 required property SystemTrayItem modelData
 
+                property bool menuOpen: false
+
                 width: 26
                 height: 26
 
                 Rectangle {
                     anchors.fill: parent
                     radius: Theme.rSm
-                    color: itemMouse.containsMouse ? Theme.alpha(Theme.accentLight, 0.14) : "transparent"
+                    color: (itemMouse.containsMouse || entry.menuOpen) ? Theme.alpha(Theme.accentLight, 0.14) : "transparent"
 
                     Behavior on color {
                         ColorAnimation {
@@ -83,7 +85,7 @@ Item {
                         // action, so a left click should open the menu instead.
                         if (event.button === Qt.RightButton || item.onlyMenu) {
                             if (item.hasMenu)
-                                menu.open();
+                                entry.menuOpen = !entry.menuOpen;
                         } else {
                             item.activate();
                         }
@@ -95,17 +97,18 @@ Item {
                     }
                 }
 
-                QsMenuAnchor {
-                    id: menu
-                    menu: entry.modelData.menu
-                    anchor.item: entry
-                    anchor.gravity: Edges.Bottom
-                    anchor.edges: Edges.Bottom
+                TrayMenu {
+                    menuHandle: entry.modelData.menu
+                    anchorItem: entry
+                    shouldOpen: entry.menuOpen
+                    onDismissRequested: entry.menuOpen = false
                 }
 
                 Tooltip {
                     target: entry
-                    shown: itemMouse.containsMouse
+                    // The menu already labels the item, and the tooltip would
+                    // otherwise sit on top of it.
+                    shown: itemMouse.containsMouse && !entry.menuOpen
                     text: entry.modelData.tooltipTitle !== "" ? entry.modelData.tooltipTitle : entry.modelData.title
                 }
             }
