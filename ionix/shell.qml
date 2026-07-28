@@ -30,6 +30,14 @@ ShellRoot {
         delegate: OsdWindow {}
     }
 
+    // Same reasoning for toasts, except only the target screen ever shows them —
+    // see NotificationToasts.
+    Variants {
+        model: Quickshell.screens
+
+        delegate: NotificationToasts {}
+    }
+
     // Optional user extension, loaded as-is when the file exists.
     Loader {
         source: userProbe.loaded ? `file://${Config.userDir}/user.qml` : ""
@@ -103,6 +111,24 @@ ShellRoot {
         }
         function current(): string {
             return Popouts.current;
+        }
+    }
+
+    IpcHandler {
+        target: "notifications"
+
+        function toggle(): void {
+            Popouts.toggle("notifications", null);
+        }
+        function dnd(): bool {
+            Notifications.toggleDnd();
+            return Notifications.dnd;
+        }
+        function clear(): void {
+            Notifications.clearAll();
+        }
+        function count(): int {
+            return Notifications.count;
         }
     }
 

@@ -105,7 +105,13 @@
     "criticalAt": 15
   },
 
-  "notifications": { "client": "swaync" },
+  "notifications": {
+    "popups": true,
+    "timeout": 5000,
+    "maxPopups": 3,
+    "width": 380,
+    "monitor": ""
+  },
 
   "osd": {
     "enabled": true,
