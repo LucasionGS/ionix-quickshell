@@ -11,6 +11,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import qs.config
+import qs.services
 
 PopupWindow {
     id: root
@@ -48,10 +49,14 @@ PopupWindow {
     }
 
 
+    // Dismissal must go through Popouts, never through `shouldOpen = false`:
+    // callers bind shouldOpen to Popouts.isOpen(...), and assigning to it would
+    // overwrite that binding with a constant. The panel would then close once and
+    // never reopen, because nothing re-evaluates when Popouts.current changes.
     HyprlandFocusGrab {
         active: root.shouldOpen
         windows: [root]
-        onCleared: root.shouldOpen = false
+        onCleared: Popouts.close()
     }
 
     GlassPanel {
@@ -87,6 +92,6 @@ PopupWindow {
     Shortcut {
         sequence: "Escape"
         enabled: root.shouldOpen
-        onActivated: root.shouldOpen = false
+        onActivated: Popouts.close()
     }
 }
