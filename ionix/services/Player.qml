@@ -88,8 +88,12 @@ Singleton {
     }
 
     function seek(seconds) {
-        if (root.player?.canSeek)
-            root.player.position = Math.max(0, Math.min(root.length, root.position + seconds));
+        const p = root.player;
+        if (!p?.canSeek)
+            return;
+        // Offset from the player's own value, not `root.position` — that one is
+        // only as fresh as the last tick of the timer below.
+        p.position = Math.max(0, Math.min(root.length, p.position + seconds));
     }
 
     function seekTo(fraction) {
@@ -113,6 +117,26 @@ Singleton {
         const m = Math.floor(total / 60);
         const s = total % 60;
         return `${m}:${s < 10 ? "0" : ""}${s}`;
+    }
+
+    // ── Position ────────────────────────────────────────────────────────────
+
+    // Reading MprisPlayer.position runs the player's own clock forward, but
+    // Quickshell only emits positionChanged when D-Bus reports a jump — so a QML
+    // binding on it latches onto whatever the last seek reported and never moves
+    // again. Emitting the signal ourselves is what re-runs those bindings; there
+    // is no property that ticks on its own.
+    //
+    // This runs whenever something is playing rather than only while the popout is
+    // open, because a stale `position` would also shift the wheel-scrub in the bar.
+    // A paused player needs no tick: its position genuinely isn't moving, and a
+    // seek from outside the shell emits positionChanged by itself.
+    Timer {
+        running: !!root.player && root.playing
+        interval: 1000
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.player?.positionChanged()
     }
 
     // ── Fallback plumbing ───────────────────────────────────────────────────
