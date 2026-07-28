@@ -51,9 +51,10 @@ Singleton {
                 middleCommand: ["ioexplorer-spotlight"]
             },
             workspaces: {
-                persistent: 5,
-                showEmpty: true,
-                activeOnly: false
+                // 0 = show only the workspaces this monitor actually owns. Raise it
+                // only if you have per-monitor workspace rules; see Workspaces.qml.
+                persistent: 0,
+                showEmpty: true
             },
             taskbar: {
                 enabled: true,

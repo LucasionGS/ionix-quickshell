@@ -62,9 +62,9 @@
   },
 
   "workspaces": {
-    "persistent": 5,
-    "showEmpty": true,
-    "activeOnly": false
+    "_comment": "Workspaces are filtered to the monitor the bar is on. persistent pads the list with empty slots and is 0 by default because Hyprland assigns workspace IDs dynamically across monitors; raise it only with per-monitor workspace rules.",
+    "persistent": 0,
+    "showEmpty": true
   },
 
   "taskbar": {
