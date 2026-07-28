@@ -33,6 +33,10 @@ uninstall:
 	rm -f $(UNITDIR)/ionix-quickshell.service
 	rm -rf $(LICDIR)
 
+# qmlformat does not understand every construct Quickshell allows (typed function
+# signatures in IpcHandler, for one) and silently produces nothing for those
+# files. It leaves them untouched rather than truncating them, so this is safe —
+# but it means a clean run here proves nothing about the files it skipped.
 lint:
 	qmlformat -i $$(find ionix -name '*.qml')
 
@@ -47,7 +51,23 @@ dev:
 	echo "linked $$target -> $(CURDIR)/ionix"; \
 	echo "run: qs -c ionix"
 
+# The only reliable checker is the runtime: Quickshell's types aren't on a
+# standard qmllint import path, and qmlformat can't parse the whole dialect.
+# So actually launch the shell, let it settle, and fail on anything it logged.
+# Needs a running Wayland compositor.
 check:
-	@ok=1; for f in $$(find ionix -name '*.qml'); do \
-		qmlformat "$$f" >/dev/null || { echo "PARSE FAIL: $$f"; ok=0; }; \
-	done; [ $$ok = 1 ] && echo "all QML files parse"
+	@if [ -z "$$WAYLAND_DISPLAY" ]; then \
+		echo "check: needs a running Wayland session (WAYLAND_DISPLAY is unset)"; exit 1; \
+	fi
+	@tmp=$$(mktemp); \
+	cfg="$$HOME/.config/quickshell/_iqs_check"; \
+	mkdir -p "$$(dirname "$$cfg")"; ln -sfn "$(CURDIR)/ionix" "$$cfg"; \
+	timeout 12 qs -c _iqs_check > "$$tmp" 2>&1; \
+	rm -f "$$cfg"; \
+	if grep -qE '^\s*(ERROR|WARN)' "$$tmp"; then \
+		echo "--- errors/warnings ---"; \
+		sed 's/\x1b\[[0-9;]*m//g' "$$tmp" | grep -E '^\s*(ERROR|WARN)' | sort -u; \
+		rm -f "$$tmp"; exit 1; \
+	else \
+		echo "shell loaded clean"; rm -f "$$tmp"; \
+	fi
