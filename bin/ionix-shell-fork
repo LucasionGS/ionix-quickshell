@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# ionix-shell-fork — copy the system shell into your user config for full customisation.
+#
+# Most people don't need this: ~/.config/quickshell/ionix/config.json overrides
+# settings live without forking, and user.qml adds widgets. Fork only when you
+# want to rewrite the shell itself.
+
+set -euo pipefail
+
+SYSTEM_DIR="/etc/xdg/quickshell/ionix"
+NAME="${1:-}"
+
+if [[ -z "$NAME" || "$NAME" == "-h" || "$NAME" == "--help" ]]; then
+    cat <<EOF
+Usage: ionix-shell-fork <name>
+
+Copies $SYSTEM_DIR to ~/.config/quickshell/<name> so you can edit it freely.
+
+  ionix-shell-fork mine    # then: qs -c mine
+
+Note: using the name 'ionix' overrides the system shell entirely, and you will
+stop receiving updates to it. Prefer a distinct name.
+EOF
+    exit 1
+fi
+
+if [[ ! -d "$SYSTEM_DIR" ]]; then
+    echo "error: $SYSTEM_DIR not found — is ionix-quickshell installed?" >&2
+    exit 1
+fi
+
+DEST="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/$NAME"
+
+if [[ -e "$DEST" ]]; then
+    echo "error: $DEST already exists. Remove it or pick another name." >&2
+    exit 1
+fi
+
+mkdir -p "$(dirname "$DEST")"
+cp -r "$SYSTEM_DIR" "$DEST"
+chmod -R u+w "$DEST"
+
+echo "Forked to: $DEST"
+echo
+echo "Run it with:   qs -c $NAME"
+if [[ "$NAME" != "ionix" ]]; then
+    echo "To autostart it instead of the system shell, override the unit:"
+    echo "  systemctl --user edit ionix-quickshell"
+    echo "  # [Service]"
+    echo "  # ExecStart="
+    echo "  # ExecStart=/usr/bin/qs -c $NAME"
+fi

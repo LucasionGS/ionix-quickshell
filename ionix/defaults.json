@@ -1,0 +1,124 @@
+{
+  "_comment": [
+    "Reference copy of every setting at its shipped value. This file is NOT read at runtime —",
+    "the defaults live in config/Config.qml. Copy the keys you want into",
+    "~/.config/quickshell/ionix/config.json; that file is deep-merged over these and applied",
+    "live, so saving it restyles the running shell with no restart.",
+    "Arrays replace wholesale rather than appending."
+  ],
+
+  "bar": {
+    "height": 46,
+    "position": "top",
+    "floating": true,
+    "radius": 16,
+    "opacity": 0.82,
+    "nativeBlur": true,
+    "margin": { "top": 6, "left": 8, "right": 8 },
+    "monitors": ["*"]
+  },
+
+  "modules": {
+    "left": ["Launcher", "Workspaces", "Taskbar"],
+    "center": ["MediaWidget"],
+    "right": [
+      "Tray",
+      "AudioIndicator",
+      "NetworkIndicator",
+      "BluetoothIndicator",
+      "BatteryIndicator",
+      "Clock",
+      "NotificationBell"
+    ]
+  },
+
+  "theme": {
+    "_comment": "Any key here overrides config/Theme.qml. Shown with the built-in values.",
+    "bgDeep": "#0f0a18",
+    "bgWindow": "#1a1025",
+    "bgCard": "#2d2d3f",
+    "hover": "#3a2d50",
+    "border": "#4a3d60",
+    "muted": "#6b5f80",
+    "text": "#c4b5fd",
+    "textBright": "#e2d9f3",
+    "accent": "#9b59b6",
+    "accentBright": "#a855f7",
+    "accentLight": "#c084fc",
+    "green": "#2ecc71",
+    "orange": "#f39c12",
+    "red": "#e74c3c",
+    "cyan": "#48dbfb",
+    "link": "#7c3aed",
+    "fontFamily": "JetBrainsMono Nerd Font",
+    "fontMono": "JetBrainsMono Nerd Font",
+    "fontLogo": "Ionix"
+  },
+
+  "launcher": {
+    "icon": "",
+    "command": ["ioexplorer-start", "--top", "--left"],
+    "middleCommand": ["ioexplorer-spotlight"]
+  },
+
+  "workspaces": {
+    "persistent": 5,
+    "showEmpty": true,
+    "activeOnly": false
+  },
+
+  "taskbar": {
+    "enabled": true,
+    "maxWidth": 420,
+    "iconSize": 22,
+    "currentWorkspaceOnly": true,
+    "iconOverrides": {}
+  },
+
+  "media": {
+    "backend": "auto",
+    "maxWidth": 180,
+    "preferred": "toxen"
+  },
+
+  "clock": {
+    "format": "HH:mm",
+    "dateFormat": "ddd d MMM",
+    "showDate": true
+  },
+
+  "audio": {
+    "step": 0.02,
+    "maxVolume": 1.0
+  },
+
+  "brightness": {
+    "step": 0.05,
+    "device": ""
+  },
+
+  "network": { "enabled": true },
+  "bluetooth": { "enabled": true },
+
+  "battery": {
+    "warnAt": 30,
+    "criticalAt": 15
+  },
+
+  "notifications": { "client": "swaync" },
+
+  "osd": {
+    "enabled": true,
+    "timeout": 1600,
+    "margin": 120
+  },
+
+  "power": {
+    "lock": ["hyprlock", "-c", "/etc/hypr/hyprlock.conf", "--grace", "2"],
+    "logout": ["uwsm", "stop"],
+    "suspend": ["systemctl", "suspend"],
+    "hibernate": ["systemctl", "hibernate"],
+    "reboot": ["systemctl", "reboot"],
+    "shutdown": ["systemctl", "poweroff"]
+  }
+}

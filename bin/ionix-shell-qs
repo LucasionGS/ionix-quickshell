@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Launch the Ionix Quickshell shell.
+# Stable entry point so autostart/systemd don't have to know the config name.
+exec /usr/bin/qs -c ionix "$@"
