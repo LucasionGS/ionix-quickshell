@@ -59,6 +59,16 @@ Singleton {
         return toplevel?.wayland?.appId ?? toplevel?.lastIpcObject?.class ?? "";
     }
 
+    // The installed .desktop file behind a window, or null. byId wants an exact
+    // match on the entry's id; heuristicLookup is what catches the apps whose
+    // app_id and desktop file disagree in case or suffix.
+    function entryFor(toplevel) {
+        const id = appId(toplevel);
+        if (id === "")
+            return null;
+        return DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id);
+    }
+
     // Resolve a window to an icon: user override, then the desktop entry, then a
     // heuristic lookup, then a generic fallback so the taskbar never has holes.
     function iconFor(toplevel) {
@@ -70,7 +80,7 @@ Singleton {
         if (overrides && overrides[id])
             return overrides[id];
 
-        const entry = DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id);
+        const entry = root.entryFor(toplevel);
         if (entry?.icon)
             return entry.icon;
 
@@ -94,5 +104,50 @@ Singleton {
     function close(toplevel) {
         if (toplevel?.wayland)
             toplevel.wayland.close();
+    }
+
+    // The app's own actions, as declared by the Actions= key of its .desktop file
+    // — Chrome's "New Window"/"New Incognito Window", Steam's "Store"/"Library",
+    // and so on. Plenty of apps declare none, which is a legitimate empty result
+    // rather than a lookup failure.
+    //
+    // `actions` arrives as a QList of QObjects: array-like, but not guaranteed to
+    // carry the Array prototype, so copy it before using Array methods on it.
+    function actionsFor(toplevel) {
+        const out = [];
+        const actions = root.entryFor(toplevel)?.actions;
+        if (!actions)
+            return out;
+        for (let i = 0; i < actions.length; i++)
+            out.push(actions[i]);
+        return out;
+    }
+
+    // Context-menu model for a window, in the shape ContextMenu expects.
+    //
+    // Each action runs execute(), which launches it detached through the entry's
+    // own Exec line — these start new instances, they don't manipulate the window
+    // that was clicked. Close is the one entry not sourced from the desktop file;
+    // it acts on this specific window via the wlr handle.
+    function menuFor(toplevel) {
+        const items = root.actionsFor(toplevel).map(action => ({
+                    text: action.name,
+                    icon: action.icon ?? "",
+                    trigger: () => action.execute()
+                }));
+
+        if (items.length > 0)
+            items.push({
+                separator: true
+            });
+
+        items.push({
+            text: "Close",
+            glyph: Icons.close,
+            danger: true,
+            trigger: () => root.close(toplevel)
+        });
+
+        return items;
     }
 }
