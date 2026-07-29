@@ -60,7 +60,9 @@ Singleton {
                 enabled: true,
                 maxWidth: 420,
                 iconSize: 22,
-                currentWorkspaceOnly: true,
+                // false = every window on this monitor, whichever of its
+                // workspaces it lives on. Set true to track the visible one.
+                currentWorkspaceOnly: false,
                 iconOverrides: {}
             },
             media: {
