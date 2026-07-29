@@ -57,7 +57,7 @@
 
   "launcher": {
     "icon": "",
-    "command": ["ioexplorer-start", "--top", "--left"],
+    "command": ["ioexplorer-spotlight"],
     "middleCommand": ["ioexplorer-spotlight"]
   },
 

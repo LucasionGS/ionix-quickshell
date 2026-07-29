@@ -47,7 +47,7 @@ Singleton {
                 // U+E000 — the Ionix logo. Only Ionix.ttf provides this codepoint,
                 // so Launcher renders it with Theme.fontLogo, not the bar font.
                 icon: "",
-                command: ["ioexplorer-start", "--top", "--left"],
+                command: ["ioexplorer-spotlight"],
                 middleCommand: ["ioexplorer-spotlight"]
             },
             workspaces: {
