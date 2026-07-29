@@ -1,4 +1,4 @@
-// Window list for this monitor's active workspace.
+// Window list for this monitor, across all of its workspaces.
 //
 // Acts on the wlr-foreign-toplevel handle rather than dispatching to Hyprland, and
 // reports each button's rectangle back to the compositor with setRectangle() so
