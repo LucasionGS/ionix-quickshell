@@ -60,6 +60,11 @@ Item {
 
                             readonly property bool isActive: modelData.activated
                             readonly property bool hovered: entryMouse.containsMouse
+                            property bool menuOpen: false
+                            // An open menu keeps its button lit, so it stays obvious
+                            // which window the menu belongs to once the pointer has
+                            // moved off the button and onto the menu itself.
+                            readonly property bool highlighted: entry.hovered || entry.menuOpen
 
                             width: Config.taskbar.iconSize + Theme.sp4
                             height: layout.height
@@ -97,8 +102,8 @@ Item {
                                 height: Config.taskbar.iconSize
                                 source: entry.iconName === "" ? "" : Quickshell.iconPath(entry.iconName)
                                 asynchronous: true
-                                opacity: entry.isActive ? 1.0 : (entry.hovered ? 0.95 : 0.55)
-                                scale: entry.hovered ? 1.12 : 1.0
+                                opacity: entry.isActive ? 1.0 : (entry.highlighted ? 0.95 : 0.55)
+                                scale: entry.highlighted ? 1.12 : 1.0
 
                                 Behavior on opacity {
                                     NumberAnimation {
@@ -128,19 +133,39 @@ Item {
                                 id: entryMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                                acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: event => {
-                                    if (event.button === Qt.MiddleButton)
+                                    if (event.button === Qt.RightButton) {
+                                        if (entry.menuOpen) {
+                                            entry.menuOpen = false;
+                                            return;
+                                        }
+                                        // Assigned rather than bound: menuFor() builds
+                                        // a fresh array every call, so a binding would
+                                        // rebuild every row on any unrelated change.
+                                        menu.model = Windows.menuFor(entry.modelData);
+                                        entry.menuOpen = true;
+                                    } else if (event.button === Qt.MiddleButton) {
                                         Windows.close(entry.modelData);
-                                    else
+                                    } else {
                                         Windows.activate(entry.modelData);
+                                    }
                                 }
+                            }
+
+                            ContextMenu {
+                                id: menu
+                                anchorItem: entry
+                                shouldOpen: entry.menuOpen
+                                headerText: entry.modelData.title ?? Windows.appId(entry.modelData)
+                                headerIcon: entry.iconName
+                                onDismissRequested: entry.menuOpen = false
                             }
 
                             Tooltip {
                                 target: entry
-                                shown: entry.hovered
+                                shown: entry.hovered && !entry.menuOpen
                                 text: entry.modelData.title ?? Windows.appId(entry.modelData)
                             }
                         }
