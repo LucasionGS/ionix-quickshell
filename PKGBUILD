@@ -5,14 +5,21 @@
 # so makepkg never writes into the git checkout, which is what makes $startdir
 # safe to use here.
 #
-# End users get ionix-quickshell-git from the AUR instead (packaging/aur/PKGBUILD).
-# The two mutually provide/conflict on this name, so switching is a single
-# transaction in either direction.
+# It deliberately produces the *same package name and version scheme* as the AUR
+# package (packaging/aur/PKGBUILD): the ISO ships `ionix-quickshell-git` at
+# r<count>.<shorthash> of the submodule commit it was built from. Because the
+# installed system drops the [ionix] repo after install, pacman then sees this as
+# a foreign package, so `yay -Syu` picks up later AUR publishes normally.
+#
+# The two PKGBUILDs differ only in where the sources come from — keep
+# depends/optdepends in sync between them.
 
-pkgname=ionix-quickshell
-pkgver=0.1.0
+pkgname=ionix-quickshell-git
+_pkgname=ionix-quickshell
+# Placeholder only; pkgver() below overwrites it on every build.
+pkgver=r0.0000000
 pkgrel=1
-pkgdesc="Ionix Quickshell desktop shell — bar, popouts and OSD"
+pkgdesc="Ionix Quickshell desktop shell — bar, popouts and OSD (git)"
 arch=('any')
 url="https://github.com/LucasionGS/ionix-quickshell"
 license=('MIT')
@@ -41,9 +48,28 @@ optdepends=(
     'toxen-mini: Toxen music player integration'
     'ttf-jetbrains-mono-nerd: the glyph font the bar is designed around'
 )
-provides=('ionix-quickshell')
-conflicts=('ionix-quickshell-git')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
 source=()
+
+# Must match aur-publish.sh's formula exactly, or an ISO build and an AUR publish
+# of the same commit would disagree about which one is newer.
+#
+# build-aur.sh strips .git from the scratch copy (makepkg must not write inside a
+# checkout, and the submodule's .git is a gitlink file anyway), so it writes the
+# version to .pkgver beforehand. The git branch below is the fallback for running
+# makepkg by hand inside a real checkout.
+pkgver() {
+    if [[ -f "$startdir/.pkgver" ]]; then
+        cat "$startdir/.pkgver"
+    elif git -C "$startdir" rev-parse HEAD >/dev/null 2>&1; then
+        printf "r%s.%s" \
+            "$(git -C "$startdir" rev-list --count HEAD)" \
+            "$(git -C "$startdir" rev-parse --short HEAD)"
+    else
+        printf '%s' "$pkgver"
+    fi
+}
 
 package() {
     make -C "$startdir" DESTDIR="$pkgdir" PREFIX=/usr PKGNAME="$pkgname" install
