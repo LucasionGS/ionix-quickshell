@@ -10,6 +10,9 @@ Replaces waybar in [Ionix](https://github.com/LucasionGS/ionix-iso).
 - **Bar** — floating, blurred, rounded. Workspaces with a sliding indicator, window taskbar,
   media widget, system tray, audio / network / bluetooth / battery indicators, clock, and a
   notification bell wired to swaync.
+- **Start menu** — behind the logo button. Pinned tile grid, the apps you actually use, and a
+  search that covers applications, **your open windows** (Enter raises the window instead of
+  starting a second copy), shell actions like `dnd` / `wifi` / `lock`, and desktop themes.
 - **Popouts** — calendar, audio mixer (with per-application volume sliders), Wi-Fi picker with
   inline password entry, bluetooth device manager, media player with album-art backdrop, and a
   power menu.
@@ -67,6 +70,32 @@ applied **live** — save the file and the bar restyles itself, no restart.
 Reordering, disabling and recolouring every module is reachable from here. See
 `/etc/xdg/quickshell/ionix/defaults.json` for every key at its shipped value.
 
+The start menu has its own block:
+
+```jsonc
+{
+  "start": {
+    "enabled": true,          // false gives the logo button back to launcher.command
+    "width": 620,
+    "maxHeightFraction": 0.72, // of the screen; past that the body scrolls
+    "columns": 6,
+    "showRunning": true,
+    "recommend": "frequent",  // frequent | recent
+    "defaultPins": ["kitty", "firefox", "code"]
+  }
+}
+```
+
+`defaultPins` is only a seed. The moment you pin or unpin anything the list moves to
+`$XDG_STATE_HOME/ionix/quickshell/start.json`, which also holds the launch counts behind the
+Frequent section — that file is the one thing the shell writes. Pins are desktop-entry ids
+*without* the `.desktop` suffix, the same form a window's `app_id` resolves to; ids naming
+something you haven't installed are skipped rather than drawn as empty tiles.
+
+The theme picker in the footer only appears when `start.stylerBin` is runnable, so the menu is
+unchanged on a non-Ionix system. It defaults to the absolute
+`/usr/local/share/ionix/styler/bin/ionixtheme`.
+
 > **Why `~/.config/quickshell/ionix/config.json` is safe:** Quickshell resolves a named config by
 > looking for `<dir>/ionix/shell.qml` in each XDG config directory in turn. A directory containing
 > only `config.json` has no `shell.qml`, so resolution falls through to `/etc/xdg` and the shipped
@@ -109,8 +138,8 @@ qs -c ionix ipc show                        # list handlers
 qs -c ionix ipc call audio increase
 qs -c ionix ipc call brightness decrease
 qs -c ionix ipc call popout toggle calendar
+qs -c ionix ipc call start toggle
 qs -c ionix ipc call theme reload
-qs -c ionix ipc call bar toggle
 ```
 
 Binding the volume/brightness keys to these instead of `wpctl`/`brightnessctl` gives the OSD exact
@@ -127,11 +156,17 @@ bind = , XF86AudioRaiseVolume, exec, qs -c ionix ipc call audio increase || wpct
 ln -s "$PWD/ionix" ~/.config/quickshell/ionix
 qs -c ionix
 
-make lint     # qmlformat
+make check    # launch for 12s, fail on any logged ERROR/WARN
+make lint     # qmlformat — see the warning below
 ```
 
 Errors report as `file:line`. There is no useful static type check — Quickshell's types aren't on a
-standard `qmllint` import path — so the runtime is the only checker.
+standard `qmllint` import path — so the runtime is the only checker, and `make check` is the one
+that matters.
+
+> **`make lint` is not safe with every qmlformat.** Some versions rewrite `pragma Singleton` to sit
+> *below* the imports, which is invalid, and hoist every inline comment to the top of the object it
+> was written inside. Run it on a clean tree and read the diff before keeping it.
 
 ## Requirements
 
