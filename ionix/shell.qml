@@ -115,6 +115,20 @@ ShellRoot {
     }
 
     IpcHandler {
+        target: "start"
+
+        function toggle(): void {
+            Popouts.toggle("start", null);
+        }
+        function open(): void {
+            Popouts.open("start", null);
+        }
+        function close(): void {
+            Popouts.close();
+        }
+    }
+
+    IpcHandler {
         target: "notifications"
 
         function toggle(): void {

@@ -50,6 +50,27 @@ Singleton {
                 command: ["ioexplorer-spotlight"],
                 middleCommand: ["ioexplorer-spotlight"]
             },
+            start: {
+                enabled: true,
+                width: 620,
+                // Fraction of the screen the menu may grow to before it scrolls.
+                maxHeightFraction: 0.72,
+                columns: 6,
+                iconSize: 40,
+                showRunning: true,
+                recommend: "frequent",   // frequent | recent
+                recommendCount: 8,
+                // Seed tiles, used until the user pins something of their own. These
+                // are desktop-entry ids without the ".desktop" suffix, the same form
+                // a window's app_id resolves to. Ids that match nothing installed are
+                // skipped rather than drawn empty, so listing extras is harmless.
+                defaultPins: ["io.github.ionix.IoExplorer", "kitty", "firefox", "code", "tabby", "steam"],
+                // Where ionixtheme keeps its themes. Only read to pull each theme's
+                // colours for the picker swatches.
+                stylerDir: "/usr/local/share/ionix/styler",
+                stylerBin: "/usr/local/share/ionix/styler/bin/ionixtheme",
+                stateFile: ""            // "" → $XDG_STATE_HOME/ionix/quickshell/start.json
+            },
             workspaces: {
                 // 0 = show only the workspaces this monitor actually owns. Raise it
                 // only if you have per-monitor workspace rules; see Workspaces.qml.
@@ -133,6 +154,7 @@ Singleton {
     readonly property var modules: data.modules
     readonly property var theme: data.theme
     readonly property var launcher: data.launcher
+    readonly property var start: data.start
     readonly property var workspaces: data.workspaces
     readonly property var taskbar: data.taskbar
     readonly property var media: data.media

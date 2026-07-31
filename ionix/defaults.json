@@ -61,6 +61,22 @@
     "middleCommand": ["ioexplorer-spotlight"]
   },
 
+  "start": {
+    "_comment": "The start menu behind the logo button. enabled:false gives the button back to launcher.command. maxHeightFraction is of the screen height — past that the menu body scrolls instead of growing. defaultPins is only a seed: as soon as you pin or unpin anything the list moves to $XDG_STATE_HOME/ionix/quickshell/start.json, which also holds the launch counts behind the Frequent section. Pins are desktop-entry ids without the '.desktop' suffix; ones naming apps you don't have are skipped, not drawn empty.",
+    "enabled": true,
+    "width": 620,
+    "maxHeightFraction": 0.72,
+    "columns": 6,
+    "iconSize": 40,
+    "showRunning": true,
+    "recommend": "frequent",
+    "recommendCount": 8,
+    "defaultPins": ["io.github.ionix.IoExplorer", "kitty", "firefox", "code", "tabby", "steam"],
+    "stylerDir": "/usr/local/share/ionix/styler",
+    "stylerBin": "/usr/local/share/ionix/styler/bin/ionixtheme",
+    "stateFile": ""
+  },
+
   "workspaces": {
     "_comment": "Workspaces are filtered to the monitor the bar is on. persistent pads the list with empty slots and is 0 by default because Hyprland assigns workspace IDs dynamically across monitors; raise it only with per-monitor workspace rules.",
     "persistent": 0,
