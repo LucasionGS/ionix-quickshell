@@ -227,6 +227,13 @@ Popout {
         root.menuOpen = true;
     }
 
+    // Move a pinned tile and refresh the open menu, so the next click sees where
+    // the tile actually is now rather than where it was when the menu opened.
+    function nudgePin(entry, delta) {
+        StartState.movePin(entry.id, delta);
+        tileMenu.model = root.menuFor(entry);
+    }
+
     function menuFor(entry) {
         const pinned = StartState.isPinned(entry.id);
         const items = [
@@ -244,19 +251,24 @@ Popout {
 
         // keepOpen, because arranging a grid is a repeated action and a menu that
         // vanished after each nudge would make it unusable.
+        //
+        // The model is a frozen snapshot, so `enabled` here is only true of the
+        // moment the menu opened. Each nudge therefore rebuilds it — otherwise a
+        // tile moved off position 0 would keep showing "Move left" greyed out, and
+        // the click that should have worked would do nothing.
         if (pinned) {
             items.push({
                 text: "Move left",
                 glyph: Icons.chevronLeft,
                 enabled: StartState.pins.indexOf(entry.id) > 0,
                 keepOpen: true,
-                trigger: () => StartState.movePin(entry.id, -1)
+                trigger: () => root.nudgePin(entry, -1)
             }, {
                 text: "Move right",
                 glyph: Icons.chevronRight,
                 enabled: StartState.pins.indexOf(entry.id) < StartState.pins.length - 1,
                 keepOpen: true,
-                trigger: () => StartState.movePin(entry.id, 1)
+                trigger: () => root.nudgePin(entry, 1)
             });
         }
 

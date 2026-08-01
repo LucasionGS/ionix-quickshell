@@ -132,13 +132,27 @@ Singleton {
 
     // ── Persistence ─────────────────────────────────────────────────────────
 
+    // The exact text of our own most recent write. setText makes FileView emit
+    // loaded again, and adopting that echo would rebuild `data` from text we just
+    // serialised — same values, new object identity, so every binding downstream
+    // re-evaluates for nothing.
+    property string lastWritten: ""
+
     function replace(patch) {
         root.data = Object.assign({}, root.data, patch);
-        writeHold.restart();
+        // Written immediately rather than debounced. Coalescing looked like a
+        // saving, but every caller here is a discrete user action — one pin, one
+        // nudge, one launch — so there is no burst to coalesce, and the delay lost
+        // the edit if the shell reloaded or exited inside it.
+        const text = JSON.stringify(root.data, null, 2) + "\n";
+        root.lastWritten = text;
+        stateFile.setText(text);
     }
 
     function adopt(raw) {
         if (!raw || raw.trim() === "")
+            return;
+        if (raw === root.lastWritten)
             return;
         try {
             const parsed = JSON.parse(raw);
@@ -154,14 +168,6 @@ Singleton {
         }
     }
 
-    // Coalesces a burst of edits — reordering a tile is several replace() calls in
-    // a row, and each one would otherwise be its own atomic write.
-    Timer {
-        id: writeHold
-        interval: 400
-        onTriggered: stateFile.setText(JSON.stringify(root.data, null, 2) + "\n")
-    }
-
     // FileView writes the file but not the directory above it, and
     // ~/.local/state/ionix won't exist until something creates it.
     Process {
@@ -169,18 +175,23 @@ Singleton {
         command: ["mkdir", "-p", root.dir]
     }
 
+    // Deliberately not watched, unlike Config's files.
+    //
+    // This file has exactly one writer — us — so a watch has nothing to tell us
+    // that we don't already know, and it actively lied: reload() is asynchronous,
+    // so the text() read straight after it in onFileChanged returned the *previous*
+    // contents, which then got adopted over newer in-memory state. Two nudges of a
+    // tile a second apart were enough to see the second one undone.
+    //
+    // The cost is that hand-editing start.json needs a shell reload to take effect.
+    // For state the shell owns, that is the right trade.
     FileView {
         id: stateFile
         path: root.path
-        watchChanges: true
         blockLoading: true
         printErrors: false
         atomicWrites: true
 
         onLoaded: root.adopt(this.text())
-        onFileChanged: {
-            this.reload();
-            root.adopt(this.text());
-        }
     }
 }
