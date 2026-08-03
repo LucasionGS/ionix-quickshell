@@ -30,8 +30,9 @@ Popout {
     // ── State ───────────────────────────────────────────────────────────────
 
     property string query: ""
-    // home | all — which face the body shows when nothing is typed. A non-empty
-    // query always wins, so `mode` rather than `view` is what the body switches on.
+    // home | all | settings — which face the body shows when nothing is typed. A
+    // non-empty query always wins, so `mode` rather than `view` is what the body
+    // switches on.
     property string view: "home"
     property string category: ""
     property int selectedIndex: 0
@@ -129,8 +130,8 @@ Popout {
         return groups;
     }
 
-    // What the arrow keys walk. Home is mouse-driven: with no query there is no
-    // ranking, so a linear cursor over a grid would be arbitrary.
+    // What the arrow keys walk. Home and settings are mouse-driven: with no query
+    // there is no ranking, so a linear cursor over a grid would be arbitrary.
     readonly property var navItems: {
         if (root.searching)
             return root.orderedResults;
@@ -138,6 +139,65 @@ Popout {
             return root.filteredApps;
         return [];
     }
+
+    // The settings page. Every entry is a boolean two levels deep in Config, and
+    // every one of them is read as a live binding by whatever it controls, so a
+    // toggle takes effect without a reload. Adding a setting is one line here.
+    //
+    // `module` names the bar module the flag gates, where there is one. The flag
+    // alone isn't enough — the module also has to be listed in modules.*, and a
+    // theme that writes its own layout can drop it — so the page checks and says
+    // so rather than showing a switch that would do nothing.
+    readonly property var settingsGroups: [
+        {
+            title: "Bar",
+            rows: [
+                {
+                    section: "hue",
+                    key: "enabled",
+                    module: "HueIndicator",
+                    glyph: Icons.bulb,
+                    title: "Philips Hue",
+                    subtitle: "Show the lights module in the bar"
+                },
+                {
+                    section: "network",
+                    key: "enabled",
+                    module: "NetworkIndicator",
+                    glyph: Icons.wifi(1),
+                    title: "Network indicator",
+                    subtitle: "Wi-Fi and ethernet status"
+                },
+                {
+                    section: "bluetooth",
+                    key: "enabled",
+                    module: "BluetoothIndicator",
+                    glyph: Icons.bluetooth(true, 0),
+                    title: "Bluetooth indicator",
+                    subtitle: "Hidden anyway when there is no adapter"
+                }
+            ]
+        },
+        {
+            title: "Notifications",
+            rows: [
+                {
+                    section: "notifications",
+                    key: "popups",
+                    glyph: Icons.bell,
+                    title: "Notification popups",
+                    subtitle: "Toasts as notifications arrive"
+                },
+                {
+                    section: "osd",
+                    key: "enabled",
+                    glyph: Icons.brightness,
+                    title: "On-screen display",
+                    subtitle: "Volume and brightness overlay"
+                }
+            ]
+        }
+    ]
 
     // ── Geometry ────────────────────────────────────────────────────────────
 
@@ -480,7 +540,7 @@ Popout {
                     height: item ? item.implicitHeight : 0
                     // Recreated on every switch, which resets the scroll position —
                     // landing halfway down a list you just opened would be worse.
-                    sourceComponent: root.mode === "results" ? resultsView : (root.mode === "all" ? allAppsView : homeView)
+                    sourceComponent: root.mode === "results" ? resultsView : (root.mode === "all" ? allAppsView : (root.mode === "settings" ? settingsView : homeView))
                 }
             }
 
@@ -854,6 +914,23 @@ Popout {
 
                 IconButton {
                     anchors.verticalCenter: parent.verticalCenter
+                    icon: Icons.settings
+                    fontSize: Theme.fsIcon
+                    active: root.view === "settings"
+                    colour: Theme.text
+                    tooltip: "Settings"
+                    // Search text is cleared for the same reason as the all-apps
+                    // button: a non-empty query forces mode to "results", which
+                    // would hide the page we just asked for.
+                    onClicked: {
+                        searchInput.text = "";
+                        root.view = root.view === "settings" ? "home" : "settings";
+                        searchInput.forceActiveFocus();
+                    }
+                }
+
+                IconButton {
+                    anchors.verticalCenter: parent.verticalCenter
                     visible: Themes.available
                     icon: Icons.palette
                     fontSize: Theme.fsIcon
@@ -1154,6 +1231,93 @@ Popout {
                 font.pixelSize: Theme.fsSm
                 color: Theme.muted
                 elide: Text.ElideRight
+            }
+        }
+    }
+
+    Component {
+        id: settingsView
+
+        Column {
+            width: bodyLoader.width
+            spacing: Theme.sp3
+
+            Repeater {
+                model: root.settingsGroups
+
+                delegate: Column {
+                    id: settingsGroup
+                    required property var modelData
+
+                    width: parent.width
+                    spacing: 1
+
+                    SectionHeader {
+                        width: parent.width
+                        text: settingsGroup.modelData.title
+                    }
+
+                    Repeater {
+                        model: settingsGroup.modelData.rows
+
+                        delegate: ListRow {
+                            id: settingRow
+                            required property var modelData
+
+                            // Two ways a switch here can be a lie, both worth
+                            // saying out loud rather than letting it flip and do
+                            // nothing:
+                            //
+                            //   · config.json sits above settings.json, so a key
+                            //     set by hand there can't be moved from here;
+                            //   · the module is missing from the bar layout, so
+                            //     nothing reads the flag at all.
+                            readonly property string moduleName: settingRow.modelData.module ?? ""
+                            readonly property bool missing: settingRow.moduleName !== "" && !Config.isModuleInBar(settingRow.moduleName)
+                            readonly property bool overridden: Config.isOverridden(settingRow.modelData.section, settingRow.modelData.key)
+                            readonly property bool locked: settingRow.missing || settingRow.overridden
+                            readonly property bool value: Config.setting(settingRow.modelData.section, settingRow.modelData.key) === true
+
+                            width: parent.width
+                            icon: settingRow.modelData.glyph
+                            // Orange for missing rather than muted: a layout that
+                            // dropped the module is a misconfiguration to fix, not
+                            // simply a setting someone else owns.
+                            iconColour: settingRow.missing ? Theme.orange : (settingRow.overridden ? Theme.muted : Theme.accentLight)
+                            title: settingRow.modelData.title
+                            subtitle: {
+                                if (settingRow.missing)
+                                    return `Not in your bar layout — add “${settingRow.moduleName}” to modules`;
+                                if (settingRow.overridden)
+                                    return "Pinned by config.json";
+                                return settingRow.modelData.subtitle;
+                            }
+
+                            onClicked: {
+                                if (!settingRow.locked)
+                                    Config.setSetting(settingRow.modelData.section, settingRow.modelData.key, !settingRow.value);
+                            }
+
+                            // No anchors: ListRow's trailing slot sizes itself from
+                            // childrenRect, so a child anchoring back to it loops.
+                            Switch {
+                                checked: settingRow.value
+                                enabled: !settingRow.locked
+                                onToggled: v => Config.setSetting(settingRow.modelData.section, settingRow.modelData.key, v)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                width: parent.width
+                topPadding: Theme.sp4
+                wrapMode: Text.WordWrap
+                text: "Saved to settings.json. Anything you set by hand in config.json wins, and shows here as pinned."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsXs
+                color: Theme.muted
             }
         }
     }
