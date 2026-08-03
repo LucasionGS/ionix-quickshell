@@ -2,12 +2,13 @@ pragma Singleton
 
 // Runtime configuration.
 //
-// Four layers, lowest priority first:
+// Five layers, lowest priority first:
 //   1. `defaults` below (shipped, mirrored into defaults.json for documentation)
-//   2. ~/.config/quickshell/ionix/theme.json     — written by ionix-settheme
-//   3. ~/.config/quickshell/ionix/settings.json  — written by the start menu's
+//   2. ~/.config/quickshell/ionix/theme.json     — written by ionixtheme
+//   3. the active theme's option overlays        — see "Theme options" below
+//   4. ~/.config/quickshell/ionix/settings.json  — written by the start menu's
 //      settings page; the only layer this shell writes
-//   4. ~/.config/quickshell/ionix/config.json    — the user's own overrides
+//   5. ~/.config/quickshell/ionix/config.json    — the user's own overrides
 //
 // theme.json and config.json are watched, so saving either restyles the running
 // shell — the merged `data` property is a binding, and everything downstream reads
@@ -17,6 +18,12 @@ pragma Singleton
 // always beat a GUI toggle. The cost is that hand-setting a key the settings page
 // also owns makes that switch inert, so the page asks `isOverridden()` and renders
 // those rows read-only rather than letting them flip and do nothing.
+//
+// Layer 3 is how a theme offers choices instead of only stating facts. The theme
+// declares them in its own theme.json and they merge just above it, so a theme
+// option is a suggestion next to anything either user layer says. Their values
+// live in settings.json under `themes.<themename>`, keyed by theme so switching
+// away and back doesn't lose them.
 //
 // Putting user files in ~/.config/quickshell/ionix is safe even though that path
 // shadows the system config directory: Quickshell only treats a directory as a
@@ -185,7 +192,20 @@ Singleton {
     // layer merging into that slot would mutate the earlier layer's own stored
     // object. Harmless while every layer was read-only; not something to leave
     // standing now that settingsData is rewritten at runtime.
-    readonly property var data: deepMerge(deepMerge(deepMerge(clone(defaults), clone(themeData)), clone(settingsData)), clone(userData))
+    //
+    // Every property this reads — including the ones read inside themeOption() —
+    // is a tracked dependency, so flipping an option, switching theme or saving
+    // any of the files re-runs the whole merge, exactly as a one-line binding did.
+    readonly property var data: {
+        let merged = deepMerge(clone(root.defaults), clone(root.themeData));
+        for (const opt of root.themeOptions) {
+            const overlay = root.themeOption(opt.key) === true ? opt.on : opt.off;
+            if (isPlainObject(overlay))
+                merged = deepMerge(merged, clone(overlay));
+        }
+        merged = deepMerge(merged, clone(root.settingsData));
+        return deepMerge(merged, clone(root.userData));
+    }
 
     readonly property var bar: data.bar
     readonly property var modules: data.modules
@@ -263,6 +283,97 @@ Singleton {
     // downstream re-evaluates for nothing.
     property string lastWritten: ""
 
+    // ── Theme options ───────────────────────────────────────────────────────
+    //
+    // Choices a theme offers rather than decides. Each is declared in the theme's
+    // own theme.json under `options`:
+    //
+    //   { "key": "taskbarLeft", "title": "…", "subtitle": "…", "glyph": "󰖳",
+    //     "default": false, "on": { …config patch… }, "off": { …config patch… } }
+    //
+    // `on`/`off` are ordinary config overlays, merged in by `data` above according
+    // to the option's current value; both are optional, and a missing one means
+    // "the theme's own baseline already is that state". Only booleans are rendered
+    // — the settings page draws switches — but the schema has room for an enum
+    // later without moving the values or the storage.
+    //
+    // Definitions are read from themeData, not the merged `data`: the theme owns
+    // what its options *are*, and only their values are the user's to set. (Both
+    // keys do flow through the merge into `data.options` / `data.themes`, which is
+    // harmless and cheaper than stripping them. Note `data.theme` is the colour
+    // palette and `data.themes` is option storage — different things.)
+    readonly property var themeOptions: {
+        const list = root.themeData.options;
+        if (!Array.isArray(list))
+            return [];
+        return list.filter(o => isPlainObject(o) && typeof o.key === "string" && o.key !== "");
+    }
+
+    // The value in force for the current theme: pinned by config.json, else what
+    // the settings page last wrote, else what the theme declared.
+    function themeOption(key) {
+        for (const layer of [root.userData, root.settingsData]) {
+            const stored = layer.themes?.[root.currentTheme];
+            if (isPlainObject(stored) && stored[key] !== undefined)
+                return stored[key];
+        }
+        const def = root.themeOptions.find(o => o.key === key);
+        return def ? def.default === true : undefined;
+    }
+
+    // The isOverridden() of theme options, and it has one more way to be true.
+    // Besides config.json pinning the value itself, it can pin any key the
+    // option's overlays would set — the overlay merges *below* config.json, so the
+    // switch would flip and be partly or wholly ignored. Either way the page
+    // renders the row read-only instead.
+    function isThemeOptionPinned(opt) {
+        if (!isPlainObject(opt))
+            return false;
+
+        const pinned = root.userData.themes?.[root.currentTheme];
+        if (isPlainObject(pinned) && pinned[opt.key] !== undefined)
+            return true;
+
+        for (const overlay of [opt.on, opt.off]) {
+            if (!isPlainObject(overlay))
+                continue;
+            for (const section in overlay) {
+                const sub = overlay[section];
+                if (isPlainObject(sub)) {
+                    for (const key in sub)
+                        if (isOverridden(section, key))
+                            return true;
+                } else if (root.userData[section] !== undefined) {
+                    // A scalar or array at the top level — config.json naming it
+                    // at all is enough to win.
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function setThemeOption(key, value) {
+        // Nothing to key the entry by. Only reachable with the styler absent, and
+        // the settings page hides the section in that case.
+        if (root.currentTheme === "")
+            return;
+
+        const next = clone(root.settingsData);
+        if (!isPlainObject(next.themes))
+            next.themes = ({});
+        if (!isPlainObject(next.themes[root.currentTheme]))
+            next.themes[root.currentTheme] = ({});
+        next.themes[root.currentTheme][key] = value;
+
+        // Wholesale replacement and the lastWritten guard, for the same reasons
+        // spelled out in setSetting. Cloning all of settingsData is also what
+        // keeps other themes' stored options intact.
+        root.settingsData = next;
+        root.lastWritten = JSON.stringify(next, null, 2) + "\n";
+        settingsFile.setText(root.lastWritten);
+    }
+
     // Whether a bar should be created for this screen.
     function wantsScreen(screenName) {
         const list = bar.monitors;
@@ -313,6 +424,7 @@ Singleton {
         userFile.reload();
         themeFile.reload();
         settingsFile.reload();
+        currentThemeFile.reload();
     }
 
     // ── Watched files ───────────────────────────────────────────────────────
@@ -348,6 +460,31 @@ Singleton {
             root.themeData = root.parse(this, "theme.json");
         }
         onLoadFailed: root.themeData = ({})
+    }
+
+    // The name of the theme ionixtheme installed last, which is the key theme
+    // options are stored under. Read here rather than through Themes.qml — that
+    // is a service and services import config, not the other way round — and
+    // Themes.current is an alias of this so the two can't disagree.
+    //
+    // Empty when the styler isn't installed. Nothing breaks: themes still work
+    // (theme.json is just a file), there is simply nowhere to file per-theme
+    // values, and the settings page hides the section.
+    property string currentTheme: ""
+
+    FileView {
+        id: currentThemeFile
+        path: `${Quickshell.env("HOME")}/.config/ionix/current-theme`
+        watchChanges: true
+        blockLoading: true
+        printErrors: false
+
+        onLoaded: root.currentTheme = this.text().trim()
+        onFileChanged: {
+            this.reload();
+            root.currentTheme = this.text().trim();
+        }
+        onLoadFailed: root.currentTheme = ""
     }
 
     // FileView writes the file but not the directory above it, and a user who has

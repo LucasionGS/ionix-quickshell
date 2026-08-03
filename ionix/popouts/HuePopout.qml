@@ -24,6 +24,10 @@ Popout {
 
     readonly property var visibleLights: root.tab === "pinned" ? Hue.pinnedLights : Hue.lights
 
+    // What the master row writes to: every light on the All lights tab, only the
+    // pinned set on Pinned.
+    readonly property string masterTarget: root.tab === "pinned" ? "pinned" : "all"
+
     // The group's hue/sat/ct have no single true value — the lights disagree.
     // These hold what the user last dragged, so the handles stay where they were
     // put instead of snapping back to a number the bridge never reports.
@@ -97,8 +101,9 @@ Popout {
         }
     }
 
-    // Shared by every light row and by the All lights row. `target` is a light id
-    // or the literal "all", which Hue routes to group 0.
+    // Shared by every light row and by the master row. `target` is a light id or
+    // one of the literals "all" (Hue routes it to group 0) and "pinned" (Hue fans
+    // it out to the pinned lights).
     component LightControls: Column {
         id: controls
 
@@ -486,17 +491,21 @@ Popout {
                 ListRow {
                     width: parent.width
                     icon: Icons.bulbGroup
-                    iconColour: Hue.anyOn ? Theme.accentLight : Theme.muted
-                    title: "All lights"
-                    subtitle: Hue.lights.length === 0 ? "No lights on this bridge" : `${Hue.onCount} of ${Hue.lights.length} on`
+                    iconColour: (root.tab === "pinned" ? Hue.pinnedAnyOn : Hue.anyOn) ? Theme.accentLight : Theme.muted
+                    title: root.tab === "pinned" ? "Pinned lights" : "All lights"
+                    subtitle: {
+                        if (root.tab === "pinned")
+                            return Hue.pinnedLights.length === 0 ? "Nothing pinned" : `${Hue.pinnedOnCount} of ${Hue.pinnedLights.length} on`;
+                        return Hue.lights.length === 0 ? "No lights on this bridge" : `${Hue.onCount} of ${Hue.lights.length} on`;
+                    }
                     onClicked: root.expandedId = root.expandedId === "all" ? "" : "all"
 
                     // No anchors: ListRow's trailing slot sizes itself from
                     // childrenRect, so a child anchoring back to it would loop.
                     Switch {
-                        enabled: Hue.lights.length > 0
-                        checked: Hue.anyOn
-                        onToggled: v => Hue.setAll({
+                        enabled: root.visibleLights.length > 0
+                        checked: root.tab === "pinned" ? Hue.pinnedAnyOn : Hue.anyOn
+                        onToggled: v => Hue.setLight(root.masterTarget, {
                                 on: v
                             })
                     }
@@ -519,12 +528,12 @@ Popout {
                         id: masterControls
                         x: Theme.sp5
                         width: parent.width - Theme.sp5 - Theme.sp3
-                        target: "all"
+                        target: root.masterTarget
                         light: ({
                                 dimmable: true,
                                 colourCapable: true,
                                 ctCapable: true,
-                                brightness: Hue.groupBri,
+                                brightness: root.tab === "pinned" ? Hue.pinnedGroupBri : Hue.groupBri,
                                 hue: root.groupHue,
                                 sat: root.groupSat,
                                 ct: root.groupCt

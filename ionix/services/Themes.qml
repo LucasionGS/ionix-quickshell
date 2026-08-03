@@ -22,8 +22,10 @@ Singleton {
     readonly property bool available: root.list.length > 0
 
     // Read from the file ionixtheme writes rather than shelling out again: this
-    // way the menu also follows a theme switched from a terminal.
-    property string current: ""
+    // way the menu also follows a theme switched from a terminal. Config owns the
+    // FileView because it needs the name too — theme options are stored per theme
+    // — and it cannot import this file without a cycle.
+    readonly property string current: Config.currentTheme
 
     // The ionixtheme executable
     readonly property string bin: Config.start.stylerBin
@@ -71,20 +73,6 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: root.list = this.text.split("\n").map(l => l.trim()).filter(l => l !== "")
         }
-    }
-
-    FileView {
-        path: `${Quickshell.env("HOME")}/.config/ionix/current-theme`
-        watchChanges: true
-        blockLoading: true
-        printErrors: false
-
-        onLoaded: root.current = this.text().trim()
-        onFileChanged: {
-            this.reload();
-            root.current = this.text().trim();
-        }
-        onLoadFailed: root.current = ""
     }
 
     // One FileView per theme, over the same theme.json the styler symlinks into

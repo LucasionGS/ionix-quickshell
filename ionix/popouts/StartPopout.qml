@@ -1310,6 +1310,55 @@ Popout {
                 }
             }
 
+            // Whatever the current theme chose to make optional. Kept apart from
+            // settingsGroups above rather than folded into it: those are fixed
+            // rows this shell owns, these are declared by a file that can change
+            // under us and are stored per theme.
+            Column {
+                width: parent.width
+                spacing: 1
+                visible: Config.currentTheme !== "" && Config.themeOptions.length > 0
+
+                SectionHeader {
+                    width: parent.width
+                    text: "Theme options"
+                }
+
+                Repeater {
+                    model: Config.themeOptions
+
+                    delegate: ListRow {
+                        id: optionRow
+                        required property var modelData
+
+                        readonly property bool pinned: Config.isThemeOptionPinned(optionRow.modelData)
+                        readonly property bool value: Config.themeOption(optionRow.modelData.key) === true
+
+                        width: parent.width
+                        // Everything below comes from theme JSON, so none of it is
+                        // guaranteed to be there — fall back rather than drawing a
+                        // row with an empty glyph or no name.
+                        icon: (optionRow.modelData.glyph && optionRow.modelData.glyph !== "") ? optionRow.modelData.glyph : Icons.settings
+                        iconColour: optionRow.pinned ? Theme.muted : Theme.accentLight
+                        title: optionRow.modelData.title ?? optionRow.modelData.key
+                        subtitle: optionRow.pinned ? "Pinned by config.json" : (optionRow.modelData.subtitle ?? "")
+
+                        onClicked: {
+                            if (!optionRow.pinned)
+                                Config.setThemeOption(optionRow.modelData.key, !optionRow.value);
+                        }
+
+                        // No anchors: ListRow's trailing slot sizes itself from
+                        // childrenRect, so a child anchoring back to it loops.
+                        Switch {
+                            checked: optionRow.value
+                            enabled: !optionRow.pinned
+                            onToggled: v => Config.setThemeOption(optionRow.modelData.key, v)
+                        }
+                    }
+                }
+            }
+
             Text {
                 width: parent.width
                 topPadding: Theme.sp4

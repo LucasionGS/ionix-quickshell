@@ -6,11 +6,22 @@
     "live, so saving it restyles the running shell with no restart.",
     "Arrays replace wholesale rather than appending.",
     "",
-    "Four layers are merged, lowest priority first: these defaults, then theme.json (written by",
-    "ionix-settheme), then settings.json (written by the start menu's settings page — the only",
-    "file the shell itself writes), then config.json (yours). config.json therefore beats the",
-    "settings page: a key you set by hand there makes the matching switch inert, and the page",
-    "shows those rows as 'Pinned by config.json' rather than letting them flip and do nothing."
+    "Five layers are merged, lowest priority first: these defaults, then theme.json (written by",
+    "ionixtheme), then the active theme's option overlays (below), then settings.json (written",
+    "by the start menu's settings page — the only file the shell itself writes), then config.json",
+    "(yours). config.json therefore beats the settings page: a key you set by hand there makes the",
+    "matching switch inert, and the page shows those rows as 'Pinned by config.json' rather than",
+    "letting them flip and do nothing.",
+    "",
+    "Theme options: a theme.json may declare an 'options' array, each entry",
+    "  { key, title, subtitle, glyph, default: bool, on: {config patch}, off: {config patch} },",
+    "which the settings page renders as a switch under 'Theme options'. Flipping one merges that",
+    "entry's 'on' or 'off' patch just above the theme's own values — so both files above still win",
+    "— and stores the value in settings.json under themes.<themename>.<key>, keyed by theme so",
+    "switching away and back keeps it. Both patches are optional: leaving 'off' out means the",
+    "theme's plain values already are the off state. Only booleans are rendered today.",
+    "",
+    "Do not put 'options' here: options are declared by a theme, and these defaults are not one."
   ],
 
   "bar": {
