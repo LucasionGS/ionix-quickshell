@@ -86,11 +86,22 @@ Singleton {
     readonly property int onCount: root.lights.filter(l => l.on).length
     readonly property bool anyOn: root.onCount > 0
 
+    readonly property int pinnedOnCount: root.pinnedLights.filter(l => l.on).length
+    readonly property bool pinnedAnyOn: root.pinnedOnCount > 0
+
     // Average brightness across the lights that are on — what the master slider
     // shows. Lights that are off would drag it to zero and make the handle jump
     // as soon as one is switched off.
     readonly property real groupBri: {
         const lit = root.lights.filter(l => l.on && l.dimmable);
+        if (lit.length === 0)
+            return 0;
+        return lit.reduce((sum, l) => sum + l.brightness, 0) / lit.length;
+    }
+
+    // Same, over just the pinned lights — what the Pinned tab's master row shows.
+    readonly property real pinnedGroupBri: {
+        const lit = root.pinnedLights.filter(l => l.on && l.dimmable);
         if (lit.length === 0)
             return 0;
         return lit.reduce((sum, l) => sum + l.brightness, 0) / lit.length;
@@ -321,7 +332,7 @@ Singleton {
     // snap a slider back to a value the user has already moved past.
     property var pending: ({})
 
-    // id (or "all") → patch waiting to be sent. The bridge rate-limits, and
+    // id (or "all"/"pinned") → patch waiting to be sent. The bridge rate-limits, and
     // StyledSlider.moved fires on every mouse move, so writes are coalesced.
     property var queued: ({})
 
@@ -370,9 +381,10 @@ Singleton {
     // as a colour temperature instead when the light supports one, because a
     // desaturated RGB white looks noticeably worse than the bulb's own white.
     function setColour(id, colour) {
-        // "all" has no capabilities of its own — the bridge applies what it can to
-        // each member, so the group is treated as capable of everything.
-        const group = String(id) === "all";
+        // "all" and "pinned" have no capabilities of their own — the bridge
+        // applies what it can to each member, so a group target is treated as
+        // capable of everything.
+        const group = String(id) === "all" || String(id) === "pinned";
         const l = group ? null : root.light(id);
         if (!group && !l)
             return;
@@ -411,7 +423,7 @@ Singleton {
         root.queued = q;
         root.optimistic(target, patch);
 
-        if (target === "all")
+        if (target === "all" || target === "pinned")
             groupSend.restart();
         else
             lightSend.restart();
@@ -423,7 +435,7 @@ Singleton {
         // sticking on screen forever.
         const expires = Date.now() + 2500;
         const next = Object.assign({}, root.pending);
-        const ids = target === "all" ? Object.keys(root.raw) : [target];
+        const ids = target === "all" ? Object.keys(root.raw) : target === "pinned" ? root.pinnedLights.map(l => l.id) : [target];
         for (const id of ids)
             next[id] = {
                 patch: Object.assign({}, next[id]?.patch ?? ({}), patch),
@@ -487,7 +499,7 @@ Singleton {
         const q = root.queued;
         const keep = {};
         for (const target in q) {
-            if (target === "all") {
+            if (target === "all" || target === "pinned") {
                 keep[target] = q[target];
                 continue;
             }
@@ -497,13 +509,22 @@ Singleton {
     }
 
     function flushGroup() {
-        const patch = root.queued["all"];
-        if (!patch)
+        const all = root.queued["all"];
+        const pinned = root.queued["pinned"];
+        if (!all && !pinned)
             return;
         const keep = Object.assign({}, root.queued);
         delete keep["all"];
+        delete keep["pinned"];
         root.queued = keep;
-        root.send(`${root.apiBase}/groups/0/action`, patch);
+        if (all)
+            root.send(`${root.apiBase}/groups/0/action`, all);
+        // The bridge has no group holding the pinned set, so it fans out per
+        // light — but on the group timer's cadence, so a slider drag doesn't
+        // multiply into N lights × the per-light send rate.
+        if (pinned)
+            for (const l of root.pinnedLights)
+                root.send(`${root.apiBase}/lights/${l.id}/state`, pinned);
     }
 
     function send(url, patch) {
