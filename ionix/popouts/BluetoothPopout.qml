@@ -74,158 +74,177 @@ Popout {
             color: Theme.muted
         }
 
-        // ── Paired ──────────────────────────────────────────────────────────
-        Column {
+        // The two device lists are the only thing here that grows without a
+        // bound — a busy room can put dozens of devices in range. Cap them at
+        // half the screen and scroll instead of pushing the footer off it.
+        Flickable {
             width: parent.width
-            spacing: 2
-            visible: !!root.adapter && root.adapter.enabled && root.paired.length > 0
+            height: Math.min(deviceColumn.implicitHeight, root.maxContentHeight)
+            contentHeight: deviceColumn.implicitHeight
+            contentWidth: width
+            interactive: contentHeight > height
+            clip: interactive
+            boundsBehavior: Flickable.StopAtBounds
 
-            Text {
-                text: "Paired"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fsXs
-                font.weight: Font.Bold
-                color: Theme.accentLight
-                bottomPadding: Theme.sp1
-            }
-
-            Repeater {
-                model: root.paired
-
-                delegate: ListRow {
-                    id: pairedRow
-                    required property BluetoothDevice modelData
-
-                    width: parent.width
-                    icon: Icons.bluetoothDevice(modelData.icon)
-                    title: modelData.name ?? modelData.deviceName ?? modelData.address
-                    selected: modelData.connected
-                    busy: modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting
-                    subtitle: {
-                        if (modelData.state === BluetoothDeviceState.Connecting)
-                            return "Connecting…";
-                        if (!modelData.connected)
-                            return "Not connected";
-                        return modelData.batteryAvailable ? `Connected  ·  ${Math.round(modelData.battery * 100)}% battery` : "Connected";
-                    }
-
-                    onClicked: modelData.connected ? modelData.disconnect() : modelData.connect()
-                    onRightClicked: modelData.trusted = !modelData.trusted
-
-                    Row {
-                        spacing: Theme.sp2
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: pairedRow.modelData.trusted
-                            text: Icons.check
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fsSm
-                            color: Theme.muted
-                        }
-
-                        Switch {
-                            anchors.verticalCenter: parent.verticalCenter
-                            checked: pairedRow.modelData.connected
-                            onToggled: v => v ? pairedRow.modelData.connect() : pairedRow.modelData.disconnect()
-                        }
-                    }
-                }
-            }
-        }
-
-        Rectangle {
-            width: parent.width
-            height: 1
-            color: Theme.divider
-            visible: !!root.adapter && root.adapter.enabled && root.paired.length > 0
-        }
-
-        // ── Available ───────────────────────────────────────────────────────
-        Column {
-            width: parent.width
-            spacing: 2
-            visible: !!root.adapter && root.adapter.enabled
-
-            Item {
+            Column {
+                id: deviceColumn
                 width: parent.width
-                height: 18
+                spacing: Theme.sp3
 
-                Text {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Available"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fsXs
-                    font.weight: Font.Bold
-                    color: Theme.accentLight
-                }
-
-                Row {
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Theme.sp2
+                // ── Paired ─────────────────────────────────────────────────────
+                Column {
+                    width: parent.width
+                    spacing: 2
+                    visible: !!root.adapter && root.adapter.enabled && root.paired.length > 0
 
                     Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: root.adapter?.discovering ?? false
-                        text: "scanning"
+                        text: "Paired"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fsXs
-                        color: Theme.muted
-
-                        SequentialAnimation on opacity {
-                            running: root.adapter?.discovering ?? false
-                            loops: Animation.Infinite
-                            NumberAnimation {
-                                to: 0.3
-                                duration: 700
-                            }
-                            NumberAnimation {
-                                to: 1.0
-                                duration: 700
-                            }
-                        }
+                        font.weight: Font.Bold
+                        color: Theme.accentLight
+                        bottomPadding: Theme.sp1
                     }
 
-                    IconButton {
-                        anchors.verticalCenter: parent.verticalCenter
-                        horizontalPadding: Theme.sp1
-                        fontSize: Theme.fsMd
-                        icon: Icons.refresh
-                        colour: (root.adapter?.discovering ?? false) ? Theme.accentBright : Theme.muted
-                        tooltip: "Toggle scanning"
-                        onClicked: {
-                            if (root.adapter)
-                                root.adapter.discovering = !root.adapter.discovering;
+                    Repeater {
+                        model: root.paired
+
+                        delegate: ListRow {
+                            id: pairedRow
+                            required property BluetoothDevice modelData
+
+                            width: parent.width
+                            icon: Icons.bluetoothDevice(modelData.icon)
+                            title: modelData.name ?? modelData.deviceName ?? modelData.address
+                            selected: modelData.connected
+                            busy: modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting
+                            subtitle: {
+                                if (modelData.state === BluetoothDeviceState.Connecting)
+                                    return "Connecting…";
+                                if (!modelData.connected)
+                                    return "Not connected";
+                                return modelData.batteryAvailable ? `Connected  ·  ${Math.round(modelData.battery * 100)}% battery` : "Connected";
+                            }
+
+                            onClicked: modelData.connected ? modelData.disconnect() : modelData.connect()
+                            onRightClicked: modelData.trusted = !modelData.trusted
+
+                            Row {
+                                spacing: Theme.sp2
+
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: pairedRow.modelData.trusted
+                                    text: Icons.check
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fsSm
+                                    color: Theme.muted
+                                }
+
+                                Switch {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    checked: pairedRow.modelData.connected
+                                    onToggled: v => v ? pairedRow.modelData.connect() : pairedRow.modelData.disconnect()
+                                }
+                            }
                         }
                     }
                 }
-            }
 
-            Text {
-                width: parent.width
-                visible: root.available.length === 0
-                horizontalAlignment: Text.AlignHCenter
-                text: (root.adapter?.discovering ?? false) ? "Searching for devices…" : "Press refresh to scan"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fsSm
-                color: Theme.muted
-                topPadding: Theme.sp2
-                bottomPadding: Theme.sp2
-            }
-
-            Repeater {
-                model: root.available
-
-                delegate: ListRow {
-                    required property BluetoothDevice modelData
+                Rectangle {
                     width: parent.width
-                    icon: Icons.bluetoothDevice(modelData.icon)
-                    title: modelData.name ?? modelData.deviceName ?? modelData.address
-                    subtitle: modelData.pairing ? "Pairing…" : modelData.address
-                    busy: modelData.pairing
-                    onClicked: modelData.pairing ? modelData.cancelPair() : modelData.pair()
+                    height: 1
+                    color: Theme.divider
+                    visible: !!root.adapter && root.adapter.enabled && root.paired.length > 0
+                }
+
+                // ── Available ──────────────────────────────────────────────────
+                Column {
+                    width: parent.width
+                    spacing: 2
+                    visible: !!root.adapter && root.adapter.enabled
+
+                    Item {
+                        width: parent.width
+                        height: 18
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Available"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fsXs
+                            font.weight: Font.Bold
+                            color: Theme.accentLight
+                        }
+
+                        Row {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: Theme.sp2
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: root.adapter?.discovering ?? false
+                                text: "scanning"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fsXs
+                                color: Theme.muted
+
+                                SequentialAnimation on opacity {
+                                    running: root.adapter?.discovering ?? false
+                                    loops: Animation.Infinite
+                                    NumberAnimation {
+                                        to: 0.3
+                                        duration: 700
+                                    }
+                                    NumberAnimation {
+                                        to: 1.0
+                                        duration: 700
+                                    }
+                                }
+                            }
+
+                            IconButton {
+                                anchors.verticalCenter: parent.verticalCenter
+                                horizontalPadding: Theme.sp1
+                                fontSize: Theme.fsMd
+                                icon: Icons.refresh
+                                colour: (root.adapter?.discovering ?? false) ? Theme.accentBright : Theme.muted
+                                tooltip: "Toggle scanning"
+                                onClicked: {
+                                    if (root.adapter)
+                                        root.adapter.discovering = !root.adapter.discovering;
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        width: parent.width
+                        visible: root.available.length === 0
+                        horizontalAlignment: Text.AlignHCenter
+                        text: (root.adapter?.discovering ?? false) ? "Searching for devices…" : "Press refresh to scan"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fsSm
+                        color: Theme.muted
+                        topPadding: Theme.sp2
+                        bottomPadding: Theme.sp2
+                    }
+
+                    Repeater {
+                        model: root.available
+
+                        delegate: ListRow {
+                            required property BluetoothDevice modelData
+                            width: parent.width
+                            icon: Icons.bluetoothDevice(modelData.icon)
+                            title: modelData.name ?? modelData.deviceName ?? modelData.address
+                            subtitle: modelData.pairing ? "Pairing…" : modelData.address
+                            busy: modelData.pairing
+                            onClicked: modelData.pairing ? modelData.cancelPair() : modelData.pair()
+                        }
+                    }
                 }
             }
         }
