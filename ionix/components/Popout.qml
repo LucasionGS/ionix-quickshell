@@ -22,6 +22,15 @@ PopupWindow {
     property int panelWidth: 340
     property int padding: Theme.sp6
 
+    // How tall a growing list inside a panel may get before it scrolls instead.
+    // Half the screen, so no popout can swallow the desktop however many wi-fi
+    // networks or bluetooth devices happen to be in range.
+    //
+    // Measured from the *screen*, never from the panel: GlassPanel sizes itself
+    // from childrenRect and this window binds implicitHeight to that, so anything
+    // in here deriving its height from the panel would close the loop.
+    readonly property int maxContentHeight: Math.round((root.screen?.height ?? 1080) * 0.5)
+
     visible: root.shouldOpen || closeHold.running
     color: "transparent"
     // Take keyboard focus so Escape and text fields work inside the panel.

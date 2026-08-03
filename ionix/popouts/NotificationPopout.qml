@@ -16,7 +16,6 @@ Popout {
 
     panelWidth: 390
 
-    readonly property int maxListHeight: Math.round((root.screen?.height ?? 1080) * 0.55)
 
     Column {
         width: parent.width
@@ -170,7 +169,7 @@ Popout {
         Flickable {
             width: parent.width
             visible: Notifications.count > 0
-            height: visible ? Math.min(listColumn.implicitHeight, root.maxListHeight) : 0
+            height: visible ? Math.min(listColumn.implicitHeight, root.maxContentHeight) : 0
             contentHeight: listColumn.implicitHeight
             contentWidth: width
             interactive: contentHeight > height

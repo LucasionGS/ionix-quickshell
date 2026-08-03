@@ -179,163 +179,177 @@ Popout {
             color: Theme.muted
         }
 
-        Column {
+        // The network list is unbounded — a dense area can show dozens of
+        // SSIDs. Cap it at half the screen and scroll, so the footer and the
+        // Wi-Fi toggle stay reachable.
+        Flickable {
             width: parent.width
-            spacing: 2
-            visible: Networking.wifiEnabled
+            height: Math.min(networkColumn.implicitHeight, root.maxContentHeight)
+            contentHeight: networkColumn.implicitHeight
+            contentWidth: width
+            interactive: contentHeight > height
+            clip: interactive
+            boundsBehavior: Flickable.StopAtBounds
 
-            Repeater {
-                model: root.networks
+            Column {
+                id: networkColumn
+                width: parent.width
+                spacing: 2
+                visible: Networking.wifiEnabled
 
-                delegate: Column {
-                    id: netEntry
-                    required property var modelData
-                    width: parent.width
-                    spacing: 0
+                Repeater {
+                    model: root.networks
 
-                    readonly property bool expanded: root.pendingNetwork === modelData
-
-                    ListRow {
+                    delegate: Column {
+                        id: netEntry
+                        required property var modelData
                         width: parent.width
-                        icon: Icons.wifi(netEntry.modelData.signalStrength)
-                        title: netEntry.modelData.name
-                        subtitle: {
-                            if (netEntry.modelData.connected)
-                                return "Connected";
-                            if (netEntry.modelData.stateChanging)
-                                return "Connecting…";
-                            return `${Math.round(netEntry.modelData.signalStrength * 100)}%` + (netEntry.modelData.known ? "  ·  saved" : "");
-                        }
-                        selected: netEntry.modelData.connected
-                        busy: netEntry.modelData.stateChanging
+                        spacing: 0
 
-                        onClicked: {
-                            root.errorText = "";
-                            const n = netEntry.modelData;
-                            if (n.connected) {
-                                n.disconnect();
-                                return;
+                        readonly property bool expanded: root.pendingNetwork === modelData
+
+                        ListRow {
+                            width: parent.width
+                            icon: Icons.wifi(netEntry.modelData.signalStrength)
+                            title: netEntry.modelData.name
+                            subtitle: {
+                                if (netEntry.modelData.connected)
+                                    return "Connected";
+                                if (netEntry.modelData.stateChanging)
+                                    return "Connecting…";
+                                return `${Math.round(netEntry.modelData.signalStrength * 100)}%` + (netEntry.modelData.known ? "  ·  saved" : "");
                             }
-                            // A saved network or an open one can connect straight away;
-                            // anything else needs a passphrase first.
-                            if (n.known || n.security === WifiSecurityType.Open) {
-                                n.connect();
-                                root.pendingNetwork = null;
-                            } else {
-                                root.pendingNetwork = netEntry.expanded ? null : n;
-                            }
-                        }
+                            selected: netEntry.modelData.connected
+                            busy: netEntry.modelData.stateChanging
 
-                        onRightClicked: {
-                            if (netEntry.modelData.known)
-                                netEntry.modelData.forget();
-                        }
-
-                        Row {
-                            spacing: Theme.sp2
-
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Icons.security(netEntry.modelData.security)
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fsSm
-                                color: Theme.muted
-                            }
-
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                visible: netEntry.modelData.connected
-                                text: Icons.check
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fsMd
-                                color: Theme.green
-                            }
-                        }
-                    }
-
-                    // Inline passphrase entry.
-                    Item {
-                        width: parent.width
-                        height: netEntry.expanded ? 38 : 0
-                        clip: true
-                        visible: height > 0
-
-                        Behavior on height {
-                            NumberAnimation {
-                                duration: Theme.durNormal
-                                easing.type: Theme.easeStandard
-                            }
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            anchors.topMargin: 4
-                            anchors.leftMargin: Theme.sp5
-                            anchors.bottomMargin: 4
-                            radius: Theme.rSm
-                            color: Theme.alpha(Theme.bgDeep, 0.7)
-                            border.width: 1
-                            border.color: pwField.activeFocus ? Theme.accentBright : Theme.border
-
-                            Behavior on border.color {
-                                ColorAnimation {
-                                    duration: Theme.durNormal
+                            onClicked: {
+                                root.errorText = "";
+                                const n = netEntry.modelData;
+                                if (n.connected) {
+                                    n.disconnect();
+                                    return;
+                                }
+                                // A saved network or an open one can connect straight away;
+                                // anything else needs a passphrase first.
+                                if (n.known || n.security === WifiSecurityType.Open) {
+                                    n.connect();
+                                    root.pendingNetwork = null;
+                                } else {
+                                    root.pendingNetwork = netEntry.expanded ? null : n;
                                 }
                             }
 
-                            TextInput {
-                                id: pwField
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.sp3
-                                anchors.rightMargin: 34
-                                verticalAlignment: TextInput.AlignVCenter
-                                echoMode: TextInput.Password
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fsMd
-                                color: Theme.textBright
-                                selectionColor: Theme.alpha(Theme.accentBright, 0.4)
-                                clip: true
-                                focus: netEntry.expanded
+                            onRightClicked: {
+                                if (netEntry.modelData.known)
+                                    netEntry.modelData.forget();
+                            }
 
-                                onAccepted: netEntry.submit()
+                            Row {
+                                spacing: Theme.sp2
 
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    visible: pwField.text === ""
-                                    text: "Password"
+                                    text: Icons.security(netEntry.modelData.security)
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fsSm
+                                    color: Theme.muted
+                                }
+
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: netEntry.modelData.connected
+                                    text: Icons.check
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fsMd
-                                    color: Theme.muted
+                                    color: Theme.green
+                                }
+                            }
+                        }
+
+                        // Inline passphrase entry.
+                        Item {
+                            width: parent.width
+                            height: netEntry.expanded ? 38 : 0
+                            clip: true
+                            visible: height > 0
+
+                            Behavior on height {
+                                NumberAnimation {
+                                    duration: Theme.durNormal
+                                    easing.type: Theme.easeStandard
                                 }
                             }
 
-                            IconButton {
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                horizontalPadding: Theme.sp2
-                                icon: Icons.chevronRight
-                                fontSize: Theme.fsMd
-                                colour: pwField.text === "" ? Theme.border : Theme.accentBright
-                                onClicked: netEntry.submit()
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.topMargin: 4
+                                anchors.leftMargin: Theme.sp5
+                                anchors.bottomMargin: 4
+                                radius: Theme.rSm
+                                color: Theme.alpha(Theme.bgDeep, 0.7)
+                                border.width: 1
+                                border.color: pwField.activeFocus ? Theme.accentBright : Theme.border
+
+                                Behavior on border.color {
+                                    ColorAnimation {
+                                        duration: Theme.durNormal
+                                    }
+                                }
+
+                                TextInput {
+                                    id: pwField
+                                    anchors.fill: parent
+                                    anchors.leftMargin: Theme.sp3
+                                    anchors.rightMargin: 34
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    echoMode: TextInput.Password
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fsMd
+                                    color: Theme.textBright
+                                    selectionColor: Theme.alpha(Theme.accentBright, 0.4)
+                                    clip: true
+                                    focus: netEntry.expanded
+
+                                    onAccepted: netEntry.submit()
+
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: pwField.text === ""
+                                        text: "Password"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fsMd
+                                        color: Theme.muted
+                                    }
+                                }
+
+                                IconButton {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    horizontalPadding: Theme.sp2
+                                    icon: Icons.chevronRight
+                                    fontSize: Theme.fsMd
+                                    colour: pwField.text === "" ? Theme.border : Theme.accentBright
+                                    onClicked: netEntry.submit()
+                                }
                             }
                         }
-                    }
 
-                    function submit() {
-                        if (pwField.text === "")
-                            return;
-                        root.errorText = "";
-                        netEntry.modelData.connectWithPsk(pwField.text);
-                        pwField.text = "";
-                        root.pendingNetwork = null;
-                    }
+                        function submit() {
+                            if (pwField.text === "")
+                                return;
+                            root.errorText = "";
+                            netEntry.modelData.connectWithPsk(pwField.text);
+                            pwField.text = "";
+                            root.pendingNetwork = null;
+                        }
 
-                    Connections {
-                        target: netEntry.modelData
-                        function onConnectionFailed(reason) {
-                            root.errorText = `${netEntry.modelData.name}: ${root.failText(reason)}`;
-                            if (reason === ConnectionFailReason.NoSecrets)
-                                root.pendingNetwork = netEntry.modelData;
+                        Connections {
+                            target: netEntry.modelData
+                            function onConnectionFailed(reason) {
+                                root.errorText = `${netEntry.modelData.name}: ${root.failText(reason)}`;
+                                if (reason === ConnectionFailReason.NoSecrets)
+                                    root.pendingNetwork = netEntry.modelData;
+                            }
                         }
                     }
                 }

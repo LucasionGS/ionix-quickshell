@@ -22,7 +22,6 @@ Popout {
     // than the screen otherwise.
     property string expandedId: ""
 
-    readonly property int maxListHeight: Math.round((root.screen?.height ?? 1080) * 0.5)
     readonly property var visibleLights: root.tab === "pinned" ? Hue.pinnedLights : Hue.lights
 
     // The group's hue/sat/ct have no single true value — the lights disagree.
@@ -651,7 +650,7 @@ Popout {
             // panel past the bottom of the screen.
             Flickable {
                 width: parent.width
-                height: Math.min(listColumn.implicitHeight, root.maxListHeight)
+                height: Math.min(listColumn.implicitHeight, root.maxContentHeight)
                 contentHeight: listColumn.implicitHeight
                 contentWidth: width
                 interactive: contentHeight > height
