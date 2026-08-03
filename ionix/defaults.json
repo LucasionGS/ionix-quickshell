@@ -4,7 +4,13 @@
     "the defaults live in config/Config.qml. Copy the keys you want into",
     "~/.config/quickshell/ionix/config.json; that file is deep-merged over these and applied",
     "live, so saving it restyles the running shell with no restart.",
-    "Arrays replace wholesale rather than appending."
+    "Arrays replace wholesale rather than appending.",
+    "",
+    "Four layers are merged, lowest priority first: these defaults, then theme.json (written by",
+    "ionix-settheme), then settings.json (written by the start menu's settings page — the only",
+    "file the shell itself writes), then config.json (yours). config.json therefore beats the",
+    "settings page: a key you set by hand there makes the matching switch inert, and the page",
+    "shows those rows as 'Pinned by config.json' rather than letting them flip and do nothing."
   ],
 
   "bar": {
@@ -26,6 +32,7 @@
       "AudioIndicator",
       "NetworkIndicator",
       "BluetoothIndicator",
+      "HueIndicator",
       "BatteryIndicator",
       "Clock",
       "NotificationBell"
@@ -115,6 +122,16 @@
 
   "network": { "enabled": true },
   "bluetooth": { "enabled": true },
+
+  "hue": {
+    "_comment": "Philips Hue bar module, off by default. Set enabled:true and the bar shows a bulb; click it to find and pair a bridge. The bridge address and the credential it issues are NOT set here — they are written to $XDG_STATE_HOME/ionix/quickshell/hue.json along with your pinned lights, because this config is read-only. Lights are only polled while the popout is open, so pollInterval is a refresh rate you can see, not a background cost. cloudDiscovery:false skips discovery.meethue.com and leaves only manual IP entry.",
+    "enabled": false,
+    "cloudDiscovery": true,
+    "pollInterval": 2000,
+    "transitionTime": 300,
+    "presets": ["#ff4d4d", "#ff9f43", "#ffd166", "#2ecc71", "#48dbfb", "#7c3aed", "#c084fc", "#ff7bd5"],
+    "stateFile": ""
+  },
 
   "battery": {
     "warnAt": 30,

@@ -33,12 +33,9 @@ uninstall:
 	rm -f $(UNITDIR)/ionix-quickshell.service
 	rm -rf $(LICDIR)
 
-# qmlformat does not understand every construct Quickshell allows (typed function
-# signatures in IpcHandler, for one) and silently produces nothing for those
-# files. It leaves them untouched rather than truncating them, so this is safe —
-# but it means a clean run here proves nothing about the files it skipped.
-lint:
-	qmlformat -i $$(find ionix -name '*.qml')
+# qmlformat screws with formatting where it shouldn't, do not run this.
+# lint:
+# 	qmlformat -i $$(find ionix -name '*.qml')
 
 # Symlink a checkout into the user config path so `qs -c ionix` picks it up and
 # hot-reloads on save. Removes an existing symlink, refuses to clobber a real dir.

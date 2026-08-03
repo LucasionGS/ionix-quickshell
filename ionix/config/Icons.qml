@@ -143,6 +143,23 @@ Singleton {
         return "󰂯";
     }
 
+    // ── Hue ─────────────────────────────────────────────────────────────────
+    readonly property string bulb: "󰌵"
+    readonly property string bulbOn: "󰛨"
+    readonly property string bulbOff: "󰹏"
+    readonly property string bulbGroup: "󱡓"
+
+    // `ready` false covers both "not paired yet" and "credential rejected", and
+    // `stale` covers "paired, but we haven't successfully read the bridge yet".
+    // Both draw the plain unlit bulb rather than guessing at an on/off state.
+    function hue(anyOn, ready, stale) {
+        if (!ready)
+            return bulbOff;
+        if (stale)
+            return bulb;
+        return anyOn ? bulbOn : bulb;
+    }
+
     // ── Power profiles ──────────────────────────────────────────────────────
     function powerProfile(profile) {
         if (profile === PowerProfile.PowerSaver)

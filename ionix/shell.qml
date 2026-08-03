@@ -97,6 +97,43 @@ ShellRoot {
         }
     }
 
+    // Hue over IPC so lights can go on a keybind without opening the panel. Each
+    // of these is a one-shot write followed by the service's own confirm fetch —
+    // none of them start polling, which only ever runs while the popout is open.
+    IpcHandler {
+        target: "hue"
+
+        function toggle(): void {
+            Hue.setAll({
+                on: !Hue.anyOn
+            });
+        }
+        function on(): void {
+            Hue.setAll({
+                on: true
+            });
+        }
+        function off(): void {
+            Hue.setAll({
+                on: false
+            });
+        }
+        function set(percent: int): void {
+            Hue.setGroupBrightness(percent / 100);
+        }
+        function light(id: string, on: bool): void {
+            Hue.setLight(id, {
+                on: on
+            });
+        }
+        function refresh(): void {
+            Hue.refresh();
+        }
+        function status(): string {
+            return `${Hue.phase} ${Hue.onCount}/${Hue.lights.length}${Hue.stale ? " stale" : ""}`;
+        }
+    }
+
     IpcHandler {
         target: "popout"
 

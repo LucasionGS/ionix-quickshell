@@ -2,13 +2,21 @@ pragma Singleton
 
 // Runtime configuration.
 //
-// Three layers, lowest priority first:
+// Four layers, lowest priority first:
 //   1. `defaults` below (shipped, mirrored into defaults.json for documentation)
-//   2. ~/.config/quickshell/ionix/theme.json   — written by ionix-settheme
-//   3. ~/.config/quickshell/ionix/config.json  — the user's own overrides
+//   2. ~/.config/quickshell/ionix/theme.json     — written by ionix-settheme
+//   3. ~/.config/quickshell/ionix/settings.json  — written by the start menu's
+//      settings page; the only layer this shell writes
+//   4. ~/.config/quickshell/ionix/config.json    — the user's own overrides
 //
-// Both files are watched, so saving either restyles the running shell — the merged
-// `data` property is a binding, and everything downstream reads through it.
+// theme.json and config.json are watched, so saving either restyles the running
+// shell — the merged `data` property is a binding, and everything downstream reads
+// through it. settings.json is not watched; see its FileView below.
+//
+// config.json sits above settings.json deliberately: a hand-edited file should
+// always beat a GUI toggle. The cost is that hand-setting a key the settings page
+// also owns makes that switch inert, so the page asks `isOverridden()` and renders
+// those rows read-only rather than letting them flip and do nothing.
 //
 // Putting user files in ~/.config/quickshell/ionix is safe even though that path
 // shadows the system config directory: Quickshell only treats a directory as a
@@ -40,7 +48,7 @@ Singleton {
             modules: {
                 left: ["Launcher", "Workspaces", "Taskbar"],
                 center: ["MediaWidget"],
-                right: ["Tray", "AudioIndicator", "NetworkIndicator", "BluetoothIndicator", "BatteryIndicator", "Clock", "NotificationBell"]
+                right: ["Tray", "AudioIndicator", "NetworkIndicator", "BluetoothIndicator", "HueIndicator", "BatteryIndicator", "Clock", "NotificationBell"]
             },
             theme: {},
             launcher: {
@@ -111,6 +119,28 @@ Singleton {
             bluetooth: {
                 enabled: true
             },
+            hue: {
+                // Off by default: the module is in modules.right above but renders
+                // zero-width until this is true, so enabling Hue is a one-line
+                // config.json edit rather than a modules-list edit.
+                enabled: false,
+                // Ask discovery.meethue.com which bridges are on this network during
+                // setup. Set false to keep setup entirely on the LAN — the manual IP
+                // field still works.
+                cloudDiscovery: true,
+                // Only ever polled while the popout is open; nothing runs when it's
+                // closed, so this is the visible-refresh rate, not a background cost.
+                pollInterval: 2000,
+                // ms the bridge fades a change over. The API takes 100ms units, so
+                // this is rounded to the nearest 100.
+                transitionTime: 300,
+                // Quick-pick swatches in a light's colour controls.
+                presets: ["#ff4d4d", "#ff9f43", "#ffd166", "#2ecc71", "#48dbfb", "#7c3aed", "#c084fc", "#ff7bd5"],
+                // The bridge address and credential are not configured here — they
+                // are discovered once and written to hue.json, because Config is
+                // read-only by design. "" → $XDG_STATE_HOME/ionix/quickshell/hue.json
+                stateFile: ""
+            },
             battery: {
                 warnAt: 30,
                 criticalAt: 15
@@ -140,6 +170,7 @@ Singleton {
     // ── Layer sources ───────────────────────────────────────────────────────
     property var userData: ({})
     property var themeData: ({})
+    property var settingsData: ({})
 
     readonly property string userDir: {
         const xdg = Quickshell.env("XDG_CONFIG_HOME");
@@ -148,7 +179,13 @@ Singleton {
     }
 
     // ── Merged view ─────────────────────────────────────────────────────────
-    readonly property var data: deepMerge(deepMerge(clone(defaults), themeData), userData)
+    //
+    // The overlays are cloned, not passed straight in. deepMerge assigns an
+    // overlay's object by reference when the base has no such key, so a later
+    // layer merging into that slot would mutate the earlier layer's own stored
+    // object. Harmless while every layer was read-only; not something to leave
+    // standing now that settingsData is rewritten at runtime.
+    readonly property var data: deepMerge(deepMerge(deepMerge(clone(defaults), clone(themeData)), clone(settingsData)), clone(userData))
 
     readonly property var bar: data.bar
     readonly property var modules: data.modules
@@ -163,10 +200,68 @@ Singleton {
     readonly property var brightness: data.brightness
     readonly property var network: data.network
     readonly property var bluetooth: data.bluetooth
+    readonly property var hue: data.hue
     readonly property var battery: data.battery
     readonly property var notifications: data.notifications
     readonly property var osd: data.osd
     readonly property var power: data.power
+
+    // ── Settings (the writable layer) ───────────────────────────────────────
+    //
+    // Keyed by (section, key) rather than a dotted path: every setting the panel
+    // exposes is exactly two levels deep, and a pair needs no parser.
+
+    // The effective value, after the whole merge chain.
+    function setting(section, key) {
+        return root.data[section]?.[key];
+    }
+
+    // True when config.json pins this key. Anything we write to settings.json is
+    // then invisible, so the settings page shows the row read-only and says why
+    // instead of offering a switch that silently does nothing.
+    function isOverridden(section, key) {
+        const s = root.userData[section];
+        return isPlainObject(s) && s[key] !== undefined;
+    }
+
+    // Whether Bar.qml will actually instantiate this module.
+    //
+    // A module needs two things to appear: its enabled flag, and its name in one
+    // of the modules lists. Those lists replace wholesale rather than extend
+    // (see deepMerge), so a theme that writes its own layout silently drops any
+    // module the shipped defaults gained since it was written — and then the
+    // enabled flag has nothing reading it. The settings page checks this so that
+    // failure is reported rather than looking like a broken switch.
+    function isModuleInBar(name) {
+        const m = root.data.modules;
+        if (!isPlainObject(m))
+            return false;
+        for (const side of ["left", "center", "right"])
+            if (Array.isArray(m[side]) && m[side].indexOf(name) !== -1)
+                return true;
+        return false;
+    }
+
+    function setSetting(section, key, value) {
+        const next = clone(root.settingsData);
+        if (!isPlainObject(next[section]))
+            next[section] = ({});
+        next[section][key] = value;
+
+        // Replaced wholesale, never mutated in place — a `property var` holding a
+        // JS object emits no change signal when a key inside it is assigned, so
+        // `data` would not re-merge. Assigned before the write so the UI updates
+        // now rather than waiting on the file round-trip.
+        root.settingsData = next;
+        root.lastWritten = JSON.stringify(next, null, 2) + "\n";
+        settingsFile.setText(root.lastWritten);
+    }
+
+    // The exact text of our own most recent write. setText makes FileView emit
+    // loaded again, and adopting that echo would rebuild settingsData from text we
+    // just serialised — same values, new object identity, so every binding
+    // downstream re-evaluates for nothing.
+    property string lastWritten: ""
 
     // Whether a bar should be created for this screen.
     function wantsScreen(screenName) {
@@ -217,6 +312,7 @@ Singleton {
     function reloadAll() {
         userFile.reload();
         themeFile.reload();
+        settingsFile.reload();
     }
 
     // ── Watched files ───────────────────────────────────────────────────────
@@ -252,5 +348,38 @@ Singleton {
             root.themeData = root.parse(this, "theme.json");
         }
         onLoadFailed: root.themeData = ({})
+    }
+
+    // FileView writes the file but not the directory above it, and a user who has
+    // never hand-written a config.json won't have ~/.config/quickshell/ionix yet.
+    Process {
+        running: true
+        command: ["mkdir", "-p", root.userDir]
+    }
+
+    // Deliberately not watched, unlike the two above. This shell is its only
+    // writer, so a watch has nothing to tell us that setSetting doesn't already
+    // know, and StartState.qml records what watching a file you own actually
+    // costs: reload() is asynchronous, so the text() read straight after it in
+    // onFileChanged returns the *previous* contents and stomps newer state.
+    //
+    // The cost is that hand-editing settings.json needs a shell reload — or
+    // `qs -c ionix ipc call theme reload` — to take effect. For a file the GUI
+    // owns, that is the right trade.
+    FileView {
+        id: settingsFile
+        path: `${root.userDir}/settings.json`
+        blockLoading: true
+        printErrors: false
+        atomicWrites: true
+
+        onLoaded: {
+            // Our own write echoing back; adopting it would rebuild settingsData
+            // from text we just serialised.
+            if (this.text() === root.lastWritten)
+                return;
+            root.settingsData = root.parse(this, "settings.json");
+        }
+        onLoadFailed: root.settingsData = ({})
     }
 }

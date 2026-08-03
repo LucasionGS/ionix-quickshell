@@ -16,6 +16,12 @@ Item {
     property int trackHeight: 6
     property int knobSize: 15
 
+    // When set, the track is painted with this gradient and the fill bar is
+    // hidden — for pickers where the whole range is meaningful (a hue rainbow, a
+    // warm-to-cool temperature ramp) rather than an amount filled up to a point.
+    // Needs `orientation: Gradient.Horizontal` to run along the track.
+    property Gradient trackGradient: null
+
     // Emitted continuously while dragging and on click/scroll.
     signal moved(real value)
 
@@ -35,10 +41,13 @@ Item {
         height: root.trackHeight
         radius: height / 2
         color: Theme.alpha(Theme.bgDeep, 0.75)
+        gradient: root.trackGradient
         border.width: 1
         border.color: Theme.alpha(Theme.border, 0.5)
+        opacity: root.enabled ? 1 : 0.45
 
         Rectangle {
+            visible: !root.trackGradient
             width: Math.max(0, Math.min(parent.width, root._knobX))
             height: parent.height
             radius: parent.radius
