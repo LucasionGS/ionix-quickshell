@@ -31,6 +31,26 @@ PopupWindow {
     // in here deriving its height from the panel would close the loop.
     readonly property int maxContentHeight: Math.round((root.screen?.height ?? 1080) * 0.5)
 
+    // Screen-space y of this panel's top edge, for anything inside that needs to
+    // know where on the monitor it ended up — tooltips flip around the halfway
+    // line, and a footer button in a tall panel is nowhere near its anchor.
+    //
+    // This has to mirror the FlipY below rather than read the result of it: the
+    // compositor moves the surface above the anchor when it would not fit under
+    // it, and never tells us that it did. The flipped placement was measured
+    // rather than guessed — xdg-positioner mirrors the anchor edge but not the
+    // offset, so the flipped panel's *bottom* lands on the anchor's top edge
+    // pushed *down* by the same margin, not up by it.
+    function screenTop() {
+        const anchorTop = Placement.screenTop(root.anchorItem);
+        if (anchorTop < 0)
+            return -1;
+        const below = anchorTop + (root.anchorItem?.height ?? 0) + Theme.sp2;
+        if (below + root.implicitHeight <= (root.screen?.height ?? 0))
+            return below;
+        return anchorTop + Theme.sp2 - root.implicitHeight;
+    }
+
     visible: root.shouldOpen || closeHold.running
     color: "transparent"
     // Take keyboard focus so Escape and text fields work inside the panel.
