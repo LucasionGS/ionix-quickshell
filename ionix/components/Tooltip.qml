@@ -8,6 +8,10 @@
 // placement put it under the pointer whenever the target was low down — covering
 // whatever the pointer was about to move onto — and ran it off the bottom edge
 // entirely for a bar-at-bottom layout.
+//
+// `sideways` is the same idea rotated, for items in a vertical bar: the bubble
+// goes to whichever side the bar is not docked to, since above/below would land
+// it on the neighbouring module.
 
 import QtQuick
 import Quickshell
@@ -21,6 +25,12 @@ PopupWindow {
     property Item target: null
     property bool shown: false
     property int delay: 450
+    // Place beside the target rather than above/below it.
+    property bool sideways: false
+
+    // Which side that is: away from the docked edge, so the bubble grows into the
+    // screen. Only read when `sideways`.
+    readonly property bool toRight: Config.bar.position !== "right"
 
     // Keep the window alive briefly after `shown` drops so the fade-out can play.
     visible: (root.shown && root.text !== "" && armed) || fadeOut.running
@@ -36,14 +46,18 @@ PopupWindow {
     // which is the whole complaint the placement above is fixing.
     mask: Region {}
 
+    readonly property int sideEdge: root.toRight ? Edges.Right : Edges.Left
+
     anchor.item: root.target
-    anchor.gravity: root.above ? Edges.Top : Edges.Bottom
-    anchor.edges: root.above ? Edges.Top : Edges.Bottom
-    anchor.margins.top: root.above ? 0 : Theme.sp2
-    anchor.margins.bottom: root.above ? Theme.sp2 : 0
+    anchor.gravity: root.sideways ? root.sideEdge : (root.above ? Edges.Top : Edges.Bottom)
+    anchor.edges: root.sideways ? root.sideEdge : (root.above ? Edges.Top : Edges.Bottom)
+    anchor.margins.top: (root.sideways || root.above) ? 0 : Theme.sp2
+    anchor.margins.bottom: (!root.sideways && root.above) ? Theme.sp2 : 0
+    anchor.margins.left: (root.sideways && root.toRight) ? Theme.sp2 : 0
+    anchor.margins.right: (root.sideways && !root.toRight) ? Theme.sp2 : 0
     // Backstop for the cases Placement cannot resolve (a tooltip inside a plain
     // menu popup), where `above` stays false and the bubble could overflow.
-    anchor.adjustment: PopupAdjustment.SlideX | PopupAdjustment.FlipY
+    anchor.adjustment: root.sideways ? (PopupAdjustment.SlideY | PopupAdjustment.FlipX) : (PopupAdjustment.SlideX | PopupAdjustment.FlipY)
 
     implicitWidth: body.implicitWidth
     implicitHeight: body.implicitHeight
@@ -85,7 +99,8 @@ PopupWindow {
 
         opacity: root.armed && root.shown ? 1 : 0
         // Slides out of the target, so the offset follows the side it is on.
-        y: root.armed && root.shown ? 0 : (root.above ? 4 : -4)
+        y: (root.armed && root.shown) || root.sideways ? 0 : (root.above ? 4 : -4)
+        x: (root.armed && root.shown) || !root.sideways ? 0 : (root.toRight ? -4 : 4)
 
         Behavior on opacity {
             NumberAnimation {
@@ -93,6 +108,12 @@ PopupWindow {
             }
         }
         Behavior on y {
+            NumberAnimation {
+                duration: Theme.durFast
+                easing.type: Theme.easeStandard
+            }
+        }
+        Behavior on x {
             NumberAnimation {
                 duration: Theme.durFast
                 easing.type: Theme.easeStandard

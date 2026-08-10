@@ -63,11 +63,15 @@ PopupWindow {
     color: "transparent"
     grabFocus: root.shouldOpen
 
+    // Anchored the same way a Popout is — the only caller is the taskbar, which is
+    // a bar item, so a vertical bar has to push the menu sideways too.
     anchor.item: root.anchorItem
-    anchor.edges: Edges.Bottom
-    anchor.gravity: Edges.Bottom
-    anchor.margins.top: Theme.sp2
-    anchor.adjustment: PopupAdjustment.SlideX | PopupAdjustment.FlipY
+    anchor.edges: Config.barPopupEdge
+    anchor.gravity: Config.barPopupEdge
+    anchor.margins.top: Config.barVertical ? 0 : Theme.sp2
+    anchor.margins.left: Config.barPopupEdge === Edges.Right ? Theme.sp2 : 0
+    anchor.margins.right: Config.barPopupEdge === Edges.Left ? Theme.sp2 : 0
+    anchor.adjustment: Config.barVertical ? (PopupAdjustment.SlideY | PopupAdjustment.FlipX) : (PopupAdjustment.SlideX | PopupAdjustment.FlipY)
 
     implicitWidth: root.menuWidth
     implicitHeight: panel.implicitHeight

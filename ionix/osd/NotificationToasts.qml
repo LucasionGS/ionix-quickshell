@@ -53,20 +53,25 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     color: "transparent"
 
+    // A vertical bar leaves the top edge free, so toasts always start at the top
+    // and it is the right margin that has to clear the bar instead — and only
+    // when the bar is on that side.
     anchors {
-        top: root.barAtTop
-        bottom: !root.barAtTop
+        top: Config.barVertical || root.barAtTop
+        bottom: !Config.barVertical && !root.barAtTop
         right: true
     }
 
     margins {
-        top: root.barAtTop ? root.barOffset : 0
-        bottom: root.barAtTop ? 0 : root.barOffset
-        right: (Config.bar.floating ? Config.bar.margin.right : 0) + Theme.sp3
+        top: Config.barVertical ? Theme.sp3 : (root.barAtTop ? root.barOffset : 0)
+        bottom: Config.barVertical ? 0 : (root.barAtTop ? 0 : root.barOffset)
+        right: Config.bar.position === "right" ? root.barOffset : (Config.bar.floating ? Config.bar.margin.right : 0) + Theme.sp3
     }
 
-    // The bar's exclusive zone doesn't apply to us, so clear it by hand.
-    readonly property int barOffset: (Config.bar.floating ? Config.bar.margin.top : 0) + Config.bar.height + Theme.sp3
+    // The bar's exclusive zone doesn't apply to us, so clear it by hand. The
+    // floating gap is measured from the edge the bar is docked to, which is the
+    // left margin for a vertical bar — the same mapping modules/Bar.qml uses.
+    readonly property int barOffset: (Config.bar.floating ? (Config.barVertical ? Config.bar.margin.left : Config.bar.margin.top) : 0) + Config.bar.height + Theme.sp3
 
     implicitWidth: root.cardWidth
     implicitHeight: Math.max(1, column.implicitHeight)

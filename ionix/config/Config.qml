@@ -39,7 +39,13 @@ Singleton {
     // ── Shipped defaults ────────────────────────────────────────────────────
     readonly property var defaults: ({
             bar: {
+                // `height` is the bar's *thickness*, whichever edge it is on: it
+                // is the height of a top/bottom bar and the width of a left/right
+                // one. Theme.pillHeight is derived from it, and every module sizes
+                // its short axis to that, so one number governs both orientations.
                 height: 46,
+                // top | bottom | left | right. The last two stack the modules
+                // vertically — see Config.barVertical and modules/Bar.qml.
                 position: "top",
                 floating: true,
                 radius: 16,
@@ -110,7 +116,14 @@ Singleton {
             clock: {
                 format: "HH:mm",
                 dateFormat: "ddd d MMM",
-                showDate: true
+                showDate: true,
+                // A vertical bar is ~46px wide, which "HH:mm" at the bar font does
+                // not fit into, so the vertical layout gets its own formats and
+                // stacks the parts with an embedded newline. Qt.formatDateTime
+                // passes anything it doesn't recognise through as a literal, so
+                // the "\n" survives and Text renders it as two lines.
+                verticalFormat: "HH\nmm",
+                verticalDateFormat: "dd/MM"
             },
             audio: {
                 step: 0.02,
@@ -199,7 +212,7 @@ Singleton {
     readonly property var data: {
         let merged = deepMerge(clone(root.defaults), clone(root.themeData));
         for (const opt of root.themeOptions) {
-            const overlay = root.themeOption(opt.key) === true ? opt.on : opt.off;
+            const overlay = root.themeOverlay(opt);
             if (isPlainObject(overlay))
                 merged = deepMerge(merged, clone(overlay));
         }
@@ -225,6 +238,27 @@ Singleton {
     readonly property var notifications: data.notifications
     readonly property var osd: data.osd
     readonly property var power: data.power
+
+    // ── Bar orientation ─────────────────────────────────────────────────────
+    //
+    // Derived once here rather than re-tested in each module, because "is the bar
+    // vertical" is asked by things that have no reference to the bar at all —
+    // tooltips and popup menus decide which way to open from it.
+
+    readonly property bool barVertical: data.bar.position === "left" || data.bar.position === "right"
+
+    // Which side of a bar item a panel anchored to it should grow towards. A
+    // vertical bar has to push its popouts inwards or they open off-screen; the
+    // horizontal cases keep the long-standing "always downwards, let FlipY sort
+    // out a bottom bar" behaviour, which components/Popout.qml mirrors by hand in
+    // its screenTop().
+    readonly property int barPopupEdge: {
+        if (data.bar.position === "left")
+            return Edges.Right;
+        if (data.bar.position === "right")
+            return Edges.Left;
+        return Edges.Bottom;
+    }
 
     // ── Settings (the writable layer) ───────────────────────────────────────
     //
@@ -293,9 +327,20 @@ Singleton {
     //
     // `on`/`off` are ordinary config overlays, merged in by `data` above according
     // to the option's current value; both are optional, and a missing one means
-    // "the theme's own baseline already is that state". Only booleans are rendered
-    // — the settings page draws switches — but the schema has room for an enum
-    // later without moving the values or the storage.
+    // "the theme's own baseline already is that state".
+    //
+    // An option may instead offer a fixed set of values, by carrying a `choices`
+    // array in place of `on`/`off`:
+    //
+    //   { "key": "barPosition", "title": "…", "default": "top",
+    //     "choices": [ { "value": "top", "label": "Top", "glyph": "󰕰",
+    //                    "patch": { …config patch… } }, … ] }
+    //
+    // Same storage, same precedence, same overlay mechanism — only the stored
+    // value's type and the control the settings page draws differ. `patch` is
+    // optional per choice, for the one whose state the theme's own values already
+    // are. The settings page renders a switch for the boolean form and a
+    // segmented picker for the choice form.
     //
     // Definitions are read from themeData, not the merged `data`: the theme owns
     // what its options *are*, and only their values are the user's to set. (Both
@@ -309,16 +354,58 @@ Singleton {
         return list.filter(o => isPlainObject(o) && typeof o.key === "string" && o.key !== "");
     }
 
+    // Valid values of a choice-list option, or [] for a plain switch.
+    //
+    // Deliberately duck-typed rather than Array.isArray()-gated: `opt` reaches
+    // this both straight off themeData, where `choices` is a real JS array, and
+    // as a Repeater's modelData, where the round trip through QVariant leaves an
+    // array-like object that Array.isArray() reports false for. Indexing works
+    // either way, so index it.
+    function themeChoices(opt) {
+        const list = opt?.choices;
+        if (!list || typeof list === "string" || typeof list.length !== "number")
+            return [];
+        const out = [];
+        for (let i = 0; i < list.length; i++) {
+            const c = list[i];
+            if (isPlainObject(c) && c.value !== undefined)
+                out.push(c);
+        }
+        return out;
+    }
+
     // The value in force for the current theme: pinned by config.json, else what
     // the settings page last wrote, else what the theme declared.
     function themeOption(key) {
+        const def = root.themeOptions.find(o => o.key === key);
+        const choices = root.themeChoices(def);
+
         for (const layer of [root.userData, root.settingsData]) {
             const stored = layer.themes?.[root.currentTheme];
-            if (isPlainObject(stored) && stored[key] !== undefined)
-                return stored[key];
+            if (isPlainObject(stored) && stored[key] !== undefined) {
+                // A stored value that is no longer offered — the theme dropped or
+                // renamed a choice since it was written — falls through to the
+                // default rather than silently selecting nothing.
+                if (choices.length === 0 || choices.some(c => c.value === stored[key]))
+                    return stored[key];
+                break;
+            }
         }
-        const def = root.themeOptions.find(o => o.key === key);
-        return def ? def.default === true : undefined;
+
+        if (!def)
+            return undefined;
+        if (choices.length > 0)
+            return choices.some(c => c.value === def.default) ? def.default : choices[0].value;
+        return def.default === true;
+    }
+
+    // The config patch an option contributes at its current value.
+    function themeOverlay(opt) {
+        const value = root.themeOption(opt.key);
+        const choices = root.themeChoices(opt);
+        if (choices.length > 0)
+            return choices.find(c => c.value === value)?.patch;
+        return value === true ? opt.on : opt.off;
     }
 
     // The isOverridden() of theme options, and it has one more way to be true.
@@ -334,7 +421,10 @@ Singleton {
         if (isPlainObject(pinned) && pinned[opt.key] !== undefined)
             return true;
 
-        for (const overlay of [opt.on, opt.off]) {
+        const choices = root.themeChoices(opt);
+        const overlays = choices.length > 0 ? choices.map(c => c.patch) : [opt.on, opt.off];
+
+        for (const overlay of overlays) {
             if (!isPlainObject(overlay))
                 continue;
             for (const section in overlay) {

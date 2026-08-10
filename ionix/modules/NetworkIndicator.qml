@@ -22,12 +22,13 @@ Item {
     readonly property bool connecting: root.wifiDevice?.state === ConnectionState.Connecting || root.wiredDevice?.state === ConnectionState.Connecting
 
     visible: Config.network.enabled
-    implicitWidth: visible ? button.implicitWidth : 0
-    implicitHeight: Theme.pillHeight
+    implicitWidth: button.implicitWidth
+    implicitHeight: button.implicitHeight
 
     IconButton {
         id: button
         anchors.fill: parent
+        vertical: Config.barVertical
         active: root.popoutOpen
 
         icon: {

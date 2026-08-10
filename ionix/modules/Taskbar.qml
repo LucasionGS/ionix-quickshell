@@ -17,11 +17,27 @@ Item {
     property var bar: null
     readonly property var windows: Windows.forScreen(root.bar?.screen)
 
+    readonly property bool vertical: Config.barVertical
+    // Short axis of the strip; the long axis is what grows with the window list.
+    readonly property int lane: Theme.pillHeight - 8
+    // Pitch of one button along the long axis, which the indicator below steps by.
+    readonly property int cell: Config.taskbar.iconSize + Theme.sp4
+    // maxWidth is the cap on the growing axis, so it caps the height of a
+    // vertical taskbar. Keeping the key name means no theme has to be rewritten.
+    readonly property int maxExtent: Config.taskbar.maxWidth
+    readonly property real listExtent: root.vertical ? layout.implicitHeight : layout.implicitWidth
+
     visible: Config.taskbar.enabled && root.windows.length > 0
-    implicitWidth: visible ? Math.min(Config.taskbar.maxWidth, layout.implicitWidth + Theme.sp3) : 0
-    implicitHeight: Theme.pillHeight
+    implicitWidth: root.vertical ? Theme.pillHeight : Math.min(root.maxExtent, root.listExtent + Theme.sp3)
+    implicitHeight: root.vertical ? Math.min(root.maxExtent, root.listExtent + Theme.sp3) : Theme.pillHeight
 
     Behavior on implicitWidth {
+        NumberAnimation {
+            duration: Theme.durSlide
+            easing.type: Theme.easeStandard
+        }
+    }
+    Behavior on implicitHeight {
         NumberAnimation {
             duration: Theme.durSlide
             easing.type: Theme.easeStandard
@@ -30,25 +46,28 @@ Item {
 
     Pill {
         anchors.fill: parent
+        vertical: root.vertical
         padding: Theme.sp2
 
         Item {
-            width: Math.min(Config.taskbar.maxWidth - Theme.sp4, layout.implicitWidth)
-            height: Theme.pillHeight - 8
-            anchors.verticalCenter: parent.verticalCenter
+            width: root.vertical ? root.lane : Math.min(root.maxExtent - Theme.sp4, root.listExtent)
+            height: root.vertical ? Math.min(root.maxExtent - Theme.sp4, root.listExtent) : root.lane
 
             Flickable {
                 id: flick
                 anchors.fill: parent
-                contentWidth: layout.implicitWidth
-                contentHeight: height
-                flickableDirection: Flickable.HorizontalFlick
+                contentWidth: root.vertical ? width : layout.implicitWidth
+                contentHeight: root.vertical ? layout.implicitHeight : height
+                flickableDirection: root.vertical ? Flickable.VerticalFlick : Flickable.HorizontalFlick
                 boundsBehavior: Flickable.StopAtBounds
                 clip: true
 
-                Row {
+                Grid {
                     id: layout
-                    height: parent.height
+                    rows: root.vertical ? Math.max(1, root.windows.length) : 1
+                    columns: root.vertical ? 1 : Math.max(1, root.windows.length)
+                    horizontalItemAlignment: Grid.AlignHCenter
+                    verticalItemAlignment: Grid.AlignVCenter
                     spacing: Theme.sp1
 
                     Repeater {
@@ -66,8 +85,8 @@ Item {
                             // moved off the button and onto the menu itself.
                             readonly property bool highlighted: entry.hovered || entry.menuOpen
 
-                            width: Config.taskbar.iconSize + Theme.sp4
-                            height: layout.height
+                            width: root.vertical ? root.lane : root.cell
+                            height: root.vertical ? root.cell : root.lane
 
                             readonly property string iconName: Windows.iconFor(entry.modelData)
 
@@ -121,6 +140,7 @@ Item {
                             // Tell the compositor where this window's button is, so
                             // minimise/restore animates toward it.
                             onXChanged: entry.reportRect()
+                            onYChanged: entry.reportRect()
                             Component.onCompleted: entry.reportRect()
 
                             function reportRect() {
@@ -165,6 +185,7 @@ Item {
 
                             Tooltip {
                                 target: entry
+                                sideways: root.vertical
                                 shown: entry.hovered && !entry.menuOpen
                                 text: entry.modelData.title ?? Windows.appId(entry.modelData)
                             }
@@ -173,30 +194,31 @@ Item {
                 }
             }
 
-            // Sliding underline under the focused window.
+            // Sliding rule beside the focused window — under it on a horizontal
+            // bar, along its inner edge on a vertical one. Positioned from the
+            // index rather than from the delegate, because the delegate's own
+            // coordinates are inside the Flickable's moving content item.
             SlidingIndicator {
-                height: 2
-                y: parent.height - 2
+                vertical: root.vertical
                 colourStart: Theme.accentBright
                 colourEnd: Theme.accentBright
                 active: root.activeIndex >= 0
-                targetX: {
-                    const i = root.activeIndex;
-                    if (i < 0)
-                        return 0;
-                    return i * (Config.taskbar.iconSize + Theme.sp4 + Theme.sp1) + Theme.sp2 - flick.contentX;
-                }
-                targetWidth: root.activeIndex >= 0 ? Config.taskbar.iconSize : 0
+                readonly property real offset: root.activeIndex < 0 ? 0 : root.activeIndex * (root.cell + Theme.sp1) + Theme.sp2
+                targetX: root.vertical ? parent.width - 2 : offset - flick.contentX
+                targetY: root.vertical ? offset - flick.contentY : parent.height - 2
+                targetWidth: root.vertical ? 2 : (root.activeIndex >= 0 ? Config.taskbar.iconSize : 0)
+                targetHeight: root.vertical ? (root.activeIndex >= 0 ? Config.taskbar.iconSize : 0) : 2
             }
 
             // Edge fades so a scrolled list doesn't just get cut off.
             Rectangle {
                 anchors.left: parent.left
-                width: 12
-                height: parent.height
-                visible: flick.contentX > 2
+                anchors.top: parent.top
+                width: root.vertical ? parent.width : 12
+                height: root.vertical ? 12 : parent.height
+                visible: (root.vertical ? flick.contentY : flick.contentX) > 2
                 gradient: Gradient {
-                    orientation: Gradient.Horizontal
+                    orientation: root.vertical ? Gradient.Vertical : Gradient.Horizontal
                     GradientStop {
                         position: 0.0
                         color: Theme.bgDeep
@@ -210,11 +232,12 @@ Item {
 
             Rectangle {
                 anchors.right: parent.right
-                width: 12
-                height: parent.height
-                visible: flick.contentX < flick.contentWidth - flick.width - 2
+                anchors.bottom: parent.bottom
+                width: root.vertical ? parent.width : 12
+                height: root.vertical ? 12 : parent.height
+                visible: root.vertical ? flick.contentY < flick.contentHeight - flick.height - 2 : flick.contentX < flick.contentWidth - flick.width - 2
                 gradient: Gradient {
-                    orientation: Gradient.Horizontal
+                    orientation: root.vertical ? Gradient.Vertical : Gradient.Horizontal
                     GradientStop {
                         position: 0.0
                         color: "transparent"

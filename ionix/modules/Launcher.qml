@@ -15,11 +15,12 @@ Item {
     property var bar: null
 
     implicitWidth: button.implicitWidth
-    implicitHeight: Theme.pillHeight
+    implicitHeight: button.implicitHeight
 
     IconButton {
         id: button
         anchors.fill: parent
+        vertical: Config.barVertical
         icon: Config.launcher.icon
         fontFamily: Theme.fontLogo
         fontSize: Theme.fsTitle

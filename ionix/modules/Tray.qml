@@ -18,13 +18,19 @@ Item {
 
     readonly property var items: SystemTray.items.values
 
-    visible: root.items.length > 0
-    implicitWidth: visible ? layout.implicitWidth + Theme.sp2 : 0
-    implicitHeight: Theme.pillHeight
+    readonly property bool vertical: Config.barVertical
 
-    Row {
+    visible: root.items.length > 0
+    implicitWidth: root.vertical ? Theme.pillHeight : layout.implicitWidth + Theme.sp2
+    implicitHeight: root.vertical ? layout.implicitHeight + Theme.sp2 : Theme.pillHeight
+
+    Grid {
         id: layout
         anchors.centerIn: parent
+        rows: root.vertical ? Math.max(1, root.items.length) : 1
+        columns: root.vertical ? 1 : Math.max(1, root.items.length)
+        horizontalItemAlignment: Grid.AlignHCenter
+        verticalItemAlignment: Grid.AlignVCenter
         spacing: Theme.sp2
 
         Repeater {
@@ -106,6 +112,7 @@ Item {
 
                 Tooltip {
                     target: entry
+                    sideways: root.vertical
                     // The menu already labels the item, and the tooltip would
                     // otherwise sit on top of it.
                     shown: itemMouse.containsMouse && !entry.menuOpen

@@ -1332,7 +1332,10 @@ Popout {
                         required property var modelData
 
                         readonly property bool pinned: Config.isThemeOptionPinned(optionRow.modelData)
-                        readonly property bool value: Config.themeOption(optionRow.modelData.key) === true
+                        // A choice list draws a picker, a plain option a switch.
+                        readonly property var choices: Config.themeChoices(optionRow.modelData)
+                        readonly property var current: Config.themeOption(optionRow.modelData.key)
+                        readonly property bool value: optionRow.current === true
 
                         width: parent.width
                         // Everything below comes from theme JSON, so none of it is
@@ -1343,17 +1346,42 @@ Popout {
                         title: optionRow.modelData.title ?? optionRow.modelData.key
                         subtitle: optionRow.pinned ? "Pinned by config.json" : (optionRow.modelData.subtitle ?? "")
 
+                        // Clicking the row advances the option: a switch flips, a
+                        // choice list steps to the next value and wraps.
                         onClicked: {
-                            if (!optionRow.pinned)
+                            if (optionRow.pinned)
+                                return;
+                            if (optionRow.choices.length > 0) {
+                                const i = optionRow.choices.findIndex(c => c.value === optionRow.current);
+                                const next = optionRow.choices[(i + 1) % optionRow.choices.length];
+                                Config.setThemeOption(optionRow.modelData.key, next.value);
+                            } else {
                                 Config.setThemeOption(optionRow.modelData.key, !optionRow.value);
+                            }
                         }
 
                         // No anchors: ListRow's trailing slot sizes itself from
                         // childrenRect, so a child anchoring back to it loops.
+                        // Both controls are declared and the unused one collapses,
+                        // rather than being swapped by a Loader, so the row always
+                        // has a single static trailing item to measure.
                         Switch {
+                            visible: optionRow.choices.length === 0
+                            width: visible ? implicitWidth : 0
+                            height: visible ? implicitHeight : 0
                             checked: optionRow.value
                             enabled: !optionRow.pinned
                             onToggled: v => Config.setThemeOption(optionRow.modelData.key, v)
+                        }
+
+                        Segmented {
+                            visible: optionRow.choices.length > 0
+                            width: visible ? implicitWidth : 0
+                            height: visible ? implicitHeight : 0
+                            options: optionRow.choices
+                            value: optionRow.current
+                            enabled: !optionRow.pinned
+                            onPicked: v => Config.setThemeOption(optionRow.modelData.key, v)
                         }
                     }
                 }
