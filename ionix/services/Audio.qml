@@ -14,8 +14,8 @@ import qs.config
 Singleton {
     id: root
 
-    readonly property PwNode sink: Pipewire.preferredDefaultAudioSink ?? Pipewire.defaultAudioSink
-    readonly property PwNode source: Pipewire.preferredDefaultAudioSource ?? Pipewire.defaultAudioSource
+    readonly property PwNode sink: Pipewire.defaultAudioSink
+    readonly property PwNode source: Pipewire.defaultAudioSource
 
     readonly property var sinks: Pipewire.nodes.values.filter(n => n.isSink && !n.isStream)
     readonly property var sources: Pipewire.nodes.values.filter(n => !n.isSink && !n.isStream && n.audio)
