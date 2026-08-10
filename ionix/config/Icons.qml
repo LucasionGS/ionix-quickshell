@@ -55,6 +55,12 @@ Singleton {
     readonly property string history: "󰋚"
     readonly property string frequent: "󰈸"
     readonly property string window: "󰖯"
+    // Bar position picker — a panel drawn against each edge of a frame.
+    readonly property string dockWindow: "󱂬"
+    readonly property string dockTop: "󱔓"
+    readonly property string dockBottom: "󱂩"
+    readonly property string dockLeft: "󱂪"
+    readonly property string dockRight: "󱂫"
     readonly property string powerSaver: "󰌪"
     readonly property string balanced: "󰾅"
     readonly property string performance: "󰓅"

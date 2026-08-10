@@ -212,7 +212,7 @@ Singleton {
     readonly property var data: {
         let merged = deepMerge(clone(root.defaults), clone(root.themeData));
         for (const opt of root.themeOptions) {
-            const overlay = root.themeOverlay(opt);
+            const overlay = root.themeOption(opt.key) === true ? opt.on : opt.off;
             if (isPlainObject(overlay))
                 merged = deepMerge(merged, clone(overlay));
         }
@@ -327,20 +327,11 @@ Singleton {
     //
     // `on`/`off` are ordinary config overlays, merged in by `data` above according
     // to the option's current value; both are optional, and a missing one means
-    // "the theme's own baseline already is that state".
-    //
-    // An option may instead offer a fixed set of values, by carrying a `choices`
-    // array in place of `on`/`off`:
-    //
-    //   { "key": "barPosition", "title": "…", "default": "top",
-    //     "choices": [ { "value": "top", "label": "Top", "glyph": "󰕰",
-    //                    "patch": { …config patch… } }, … ] }
-    //
-    // Same storage, same precedence, same overlay mechanism — only the stored
-    // value's type and the control the settings page draws differ. `patch` is
-    // optional per choice, for the one whose state the theme's own values already
-    // are. The settings page renders a switch for the boolean form and a
-    // segmented picker for the choice form.
+    // "the theme's own baseline already is that state". Only booleans are rendered
+    // — the settings page draws switches. A setting that is genuinely one-of-N
+    // belongs in that page's own rows instead, where it applies under every theme
+    // rather than only the one that thought to declare it; bar.position is the
+    // worked example.
     //
     // Definitions are read from themeData, not the merged `data`: the theme owns
     // what its options *are*, and only their values are the user's to set. (Both
@@ -354,58 +345,16 @@ Singleton {
         return list.filter(o => isPlainObject(o) && typeof o.key === "string" && o.key !== "");
     }
 
-    // Valid values of a choice-list option, or [] for a plain switch.
-    //
-    // Deliberately duck-typed rather than Array.isArray()-gated: `opt` reaches
-    // this both straight off themeData, where `choices` is a real JS array, and
-    // as a Repeater's modelData, where the round trip through QVariant leaves an
-    // array-like object that Array.isArray() reports false for. Indexing works
-    // either way, so index it.
-    function themeChoices(opt) {
-        const list = opt?.choices;
-        if (!list || typeof list === "string" || typeof list.length !== "number")
-            return [];
-        const out = [];
-        for (let i = 0; i < list.length; i++) {
-            const c = list[i];
-            if (isPlainObject(c) && c.value !== undefined)
-                out.push(c);
-        }
-        return out;
-    }
-
     // The value in force for the current theme: pinned by config.json, else what
     // the settings page last wrote, else what the theme declared.
     function themeOption(key) {
-        const def = root.themeOptions.find(o => o.key === key);
-        const choices = root.themeChoices(def);
-
         for (const layer of [root.userData, root.settingsData]) {
             const stored = layer.themes?.[root.currentTheme];
-            if (isPlainObject(stored) && stored[key] !== undefined) {
-                // A stored value that is no longer offered — the theme dropped or
-                // renamed a choice since it was written — falls through to the
-                // default rather than silently selecting nothing.
-                if (choices.length === 0 || choices.some(c => c.value === stored[key]))
-                    return stored[key];
-                break;
-            }
+            if (isPlainObject(stored) && stored[key] !== undefined)
+                return stored[key];
         }
-
-        if (!def)
-            return undefined;
-        if (choices.length > 0)
-            return choices.some(c => c.value === def.default) ? def.default : choices[0].value;
-        return def.default === true;
-    }
-
-    // The config patch an option contributes at its current value.
-    function themeOverlay(opt) {
-        const value = root.themeOption(opt.key);
-        const choices = root.themeChoices(opt);
-        if (choices.length > 0)
-            return choices.find(c => c.value === value)?.patch;
-        return value === true ? opt.on : opt.off;
+        const def = root.themeOptions.find(o => o.key === key);
+        return def ? def.default === true : undefined;
     }
 
     // The isOverridden() of theme options, and it has one more way to be true.
@@ -421,10 +370,7 @@ Singleton {
         if (isPlainObject(pinned) && pinned[opt.key] !== undefined)
             return true;
 
-        const choices = root.themeChoices(opt);
-        const overlays = choices.length > 0 ? choices.map(c => c.patch) : [opt.on, opt.off];
-
-        for (const overlay of overlays) {
+        for (const overlay of [opt.on, opt.off]) {
             if (!isPlainObject(overlay))
                 continue;
             for (const section in overlay) {

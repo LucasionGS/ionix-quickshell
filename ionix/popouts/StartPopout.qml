@@ -148,10 +148,60 @@ Popout {
     // alone isn't enough — the module also has to be listed in modules.*, and a
     // theme that writes its own layout can drop it — so the page checks and says
     // so rather than showing a switch that would do nothing.
+    // A settings row's `choices`, as a real Array.
+    //
+    // Not Array.isArray()-gated and not returned as-is: the list is nested two
+    // Repeater models deep, and that round trip through QVariant leaves an
+    // array-like object rather than an Array — indexable and .length-able, but
+    // with no findIndex on it. Copying it out restores both.
+    function choicesOf(row) {
+        const list = row?.choices;
+        if (!list || typeof list === "string" || typeof list.length !== "number")
+            return [];
+        const out = [];
+        for (let i = 0; i < list.length; i++)
+            out.push(list[i]);
+        return out;
+    }
+
     readonly property var settingsGroups: [
         {
             title: "Bar",
             rows: [
+                {
+                    // The one row here that isn't a switch. A theme may state its
+                    // own default (winix docks to the bottom) and that still shows
+                    // as the selected value, because this reads the merged config —
+                    // but settings.json merges above theme.json, so picking an edge
+                    // here outlives a theme switch.
+                    section: "bar",
+                    key: "position",
+                    glyph: Icons.dockWindow,
+                    title: "Bar position",
+                    subtitle: "Which screen edge the bar docks to",
+                    choices: [
+                        {
+                            value: "top",
+                            label: "Top",
+                            glyph: Icons.dockTop
+                        },
+                        {
+                            value: "bottom",
+                            label: "Bottom",
+                            glyph: Icons.dockBottom
+                        },
+                        {
+                            value: "left",
+                            label: "Left",
+                            glyph: Icons.dockLeft
+                        },
+                        {
+                            value: "right",
+                            label: "Right",
+                            glyph: Icons.dockRight
+                        }
+                    ]
+                },
                 {
                     section: "hue",
                     key: "enabled",
@@ -1276,7 +1326,11 @@ Popout {
                             readonly property bool missing: settingRow.moduleName !== "" && !Config.isModuleInBar(settingRow.moduleName)
                             readonly property bool overridden: Config.isOverridden(settingRow.modelData.section, settingRow.modelData.key)
                             readonly property bool locked: settingRow.missing || settingRow.overridden
-                            readonly property bool value: Config.setting(settingRow.modelData.section, settingRow.modelData.key) === true
+                            readonly property var current: Config.setting(settingRow.modelData.section, settingRow.modelData.key)
+                            readonly property bool value: settingRow.current === true
+                            // A row that names a fixed set of values draws a picker
+                            // instead of a switch.
+                            readonly property var choices: root.choicesOf(settingRow.modelData)
 
                             width: parent.width
                             icon: settingRow.modelData.glyph
@@ -1293,17 +1347,43 @@ Popout {
                                 return settingRow.modelData.subtitle;
                             }
 
+                            // Clicking the row advances the setting: a switch flips,
+                            // a picker steps to the next value and wraps.
                             onClicked: {
-                                if (!settingRow.locked)
-                                    Config.setSetting(settingRow.modelData.section, settingRow.modelData.key, !settingRow.value);
+                                if (settingRow.locked)
+                                    return;
+                                const m = settingRow.modelData;
+                                if (settingRow.choices.length > 0) {
+                                    const i = settingRow.choices.findIndex(c => c.value === settingRow.current);
+                                    Config.setSetting(m.section, m.key, settingRow.choices[(i + 1) % settingRow.choices.length].value);
+                                } else {
+                                    Config.setSetting(m.section, m.key, !settingRow.value);
+                                }
                             }
 
                             // No anchors: ListRow's trailing slot sizes itself from
                             // childrenRect, so a child anchoring back to it loops.
+                            // Both controls are declared and the unused one
+                            // collapses, rather than being swapped by a Loader, so
+                            // the row always has one static trailing item to
+                            // measure.
                             Switch {
+                                visible: settingRow.choices.length === 0
+                                width: visible ? implicitWidth : 0
+                                height: visible ? implicitHeight : 0
                                 checked: settingRow.value
                                 enabled: !settingRow.locked
                                 onToggled: v => Config.setSetting(settingRow.modelData.section, settingRow.modelData.key, v)
+                            }
+
+                            Segmented {
+                                visible: settingRow.choices.length > 0
+                                width: visible ? implicitWidth : 0
+                                height: visible ? implicitHeight : 0
+                                options: settingRow.choices
+                                value: settingRow.current
+                                enabled: !settingRow.locked
+                                onPicked: v => Config.setSetting(settingRow.modelData.section, settingRow.modelData.key, v)
                             }
                         }
                     }
@@ -1332,10 +1412,7 @@ Popout {
                         required property var modelData
 
                         readonly property bool pinned: Config.isThemeOptionPinned(optionRow.modelData)
-                        // A choice list draws a picker, a plain option a switch.
-                        readonly property var choices: Config.themeChoices(optionRow.modelData)
-                        readonly property var current: Config.themeOption(optionRow.modelData.key)
-                        readonly property bool value: optionRow.current === true
+                        readonly property bool value: Config.themeOption(optionRow.modelData.key) === true
 
                         width: parent.width
                         // Everything below comes from theme JSON, so none of it is
@@ -1346,42 +1423,17 @@ Popout {
                         title: optionRow.modelData.title ?? optionRow.modelData.key
                         subtitle: optionRow.pinned ? "Pinned by config.json" : (optionRow.modelData.subtitle ?? "")
 
-                        // Clicking the row advances the option: a switch flips, a
-                        // choice list steps to the next value and wraps.
                         onClicked: {
-                            if (optionRow.pinned)
-                                return;
-                            if (optionRow.choices.length > 0) {
-                                const i = optionRow.choices.findIndex(c => c.value === optionRow.current);
-                                const next = optionRow.choices[(i + 1) % optionRow.choices.length];
-                                Config.setThemeOption(optionRow.modelData.key, next.value);
-                            } else {
+                            if (!optionRow.pinned)
                                 Config.setThemeOption(optionRow.modelData.key, !optionRow.value);
-                            }
                         }
 
                         // No anchors: ListRow's trailing slot sizes itself from
                         // childrenRect, so a child anchoring back to it loops.
-                        // Both controls are declared and the unused one collapses,
-                        // rather than being swapped by a Loader, so the row always
-                        // has a single static trailing item to measure.
                         Switch {
-                            visible: optionRow.choices.length === 0
-                            width: visible ? implicitWidth : 0
-                            height: visible ? implicitHeight : 0
                             checked: optionRow.value
                             enabled: !optionRow.pinned
                             onToggled: v => Config.setThemeOption(optionRow.modelData.key, v)
-                        }
-
-                        Segmented {
-                            visible: optionRow.choices.length > 0
-                            width: visible ? implicitWidth : 0
-                            height: visible ? implicitHeight : 0
-                            options: optionRow.choices
-                            value: optionRow.current
-                            enabled: !optionRow.pinned
-                            onPicked: v => Config.setThemeOption(optionRow.modelData.key, v)
                         }
                     }
                 }
