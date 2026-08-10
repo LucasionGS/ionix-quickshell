@@ -1,5 +1,10 @@
 // A rounded translucent container that groups related bar widgets.
 // Sizes itself to its content; set `accent` to give it a coloured glow.
+//
+// `vertical` stacks its children instead of lining them up, for a left/right bar.
+// The inner positioner is a Grid because that is the only one that can be either,
+// and its item alignment does what a Row's per-child verticalCenter anchors used
+// to — so children must not anchor themselves inside a Pill.
 
 import QtQuick
 import qs.config
@@ -14,9 +19,19 @@ Rectangle {
     property color accentColour: Theme.accentBright
     property bool interactive: false
     property bool hovered: false
+    property bool vertical: false
 
-    implicitWidth: layout.implicitWidth + padding * 2
-    implicitHeight: Theme.pillHeight
+    // Grid needs a real limit on one axis to know which way it runs. Counting all
+    // children rather than the visible ones is deliberate: `children` notifies,
+    // `visibleChildren` does not, and an over-count only leaves empty cells —
+    // Grid skips invisible items when it places the rest.
+    readonly property int slots: Math.max(1, layout.children.length)
+
+    // The cross axis is the pill thickness, the long axis follows the content —
+    // mirrored when vertical. The max() is a floor, not a size: content wider than
+    // the bar overflows rather than being clipped, which is easier to notice.
+    implicitWidth: root.vertical ? Math.max(Theme.pillHeight, layout.implicitWidth + padding * 2) : layout.implicitWidth + padding * 2
+    implicitHeight: root.vertical ? layout.implicitHeight + padding * 2 : Theme.pillHeight
 
     radius: Theme.rPill
     color: root.accented ? Theme.alpha(root.accentColour, 0.12) : (root.interactive && root.hovered ? Theme.alpha(Theme.hover, 0.55) : Theme.pillFill)
@@ -34,9 +49,13 @@ Rectangle {
         }
     }
 
-    Row {
+    Grid {
         id: layout
         anchors.centerIn: parent
+        rows: root.vertical ? root.slots : 1
+        columns: root.vertical ? 1 : root.slots
+        horizontalItemAlignment: Grid.AlignHCenter
+        verticalItemAlignment: Grid.AlignVCenter
         spacing: 0
     }
 

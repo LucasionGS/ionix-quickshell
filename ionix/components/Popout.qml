@@ -31,6 +31,10 @@ PopupWindow {
     // in here deriving its height from the panel would close the loop.
     readonly property int maxContentHeight: Math.round((root.screen?.height ?? 1080) * 0.5)
 
+    // Beside the bar item rather than below it when the bar is vertical, or the
+    // panel would open across the modules above and below its anchor.
+    readonly property bool sideways: Config.barVertical
+
     // Screen-space y of this panel's top edge, for anything inside that needs to
     // know where on the monitor it ended up — tooltips flip around the halfway
     // line, and a footer button in a tall panel is nowhere near its anchor.
@@ -41,10 +45,16 @@ PopupWindow {
     // rather than guessed — xdg-positioner mirrors the anchor edge but not the
     // offset, so the flipped panel's *bottom* lands on the anchor's top edge
     // pushed *down* by the same margin, not up by it.
+    //
+    // Sideways is the easier case: the panel's top starts level with the anchor's
+    // and SlideY only ever pushes it back onto the screen, which is the same
+    // clamp written out here.
     function screenTop() {
         const anchorTop = Placement.screenTop(root.anchorItem);
         if (anchorTop < 0)
             return -1;
+        if (root.sideways)
+            return Math.max(0, Math.min(anchorTop, (root.screen?.height ?? 0) - root.implicitHeight));
         const below = anchorTop + (root.anchorItem?.height ?? 0) + Theme.sp2;
         if (below + root.implicitHeight <= (root.screen?.height ?? 0))
             return below;
@@ -57,12 +67,14 @@ PopupWindow {
     grabFocus: root.shouldOpen
 
     anchor.item: root.anchorItem
-    anchor.gravity: Edges.Bottom
-    anchor.edges: Edges.Bottom
-    anchor.margins.top: Theme.sp2
+    anchor.gravity: Config.barPopupEdge
+    anchor.edges: Config.barPopupEdge
+    anchor.margins.top: root.sideways ? 0 : Theme.sp2
+    anchor.margins.left: Config.barPopupEdge === Edges.Right ? Theme.sp2 : 0
+    anchor.margins.right: Config.barPopupEdge === Edges.Left ? Theme.sp2 : 0
     // Slide back onto the screen instead of overflowing when a right-hand module
     // opens a panel wider than the space left beside it.
-    anchor.adjustment: PopupAdjustment.SlideX | PopupAdjustment.FlipY
+    anchor.adjustment: root.sideways ? (PopupAdjustment.SlideY | PopupAdjustment.FlipX) : (PopupAdjustment.SlideX | PopupAdjustment.FlipY)
 
     implicitWidth: root.panelWidth
     implicitHeight: panel.implicitHeight
@@ -95,8 +107,18 @@ PopupWindow {
 
         opacity: root.shouldOpen ? 1 : 0
         scale: root.shouldOpen ? 1 : 0.94
-        y: root.shouldOpen ? 0 : 8
-        transformOrigin: Item.Top
+        // Grows out of the edge it is anchored to, so the entry reads as the panel
+        // coming out of the bar rather than dropping onto it from nowhere.
+        y: root.shouldOpen || root.sideways ? 0 : 8
+        x: root.shouldOpen || !root.sideways ? 0 : (Config.barPopupEdge === Edges.Right ? -8 : 8)
+        transformOrigin: root.sideways ? (Config.barPopupEdge === Edges.Right ? Item.Left : Item.Right) : Item.Top
+
+        Behavior on x {
+            NumberAnimation {
+                duration: root.shouldOpen ? Theme.durSlide : Theme.durFast
+                easing.type: root.shouldOpen ? Theme.easeStandard : Theme.easeIn
+            }
+        }
 
         Behavior on opacity {
             NumberAnimation {

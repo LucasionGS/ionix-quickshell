@@ -84,11 +84,19 @@ PopupWindow {
     // parent's grab and collapse the chain.
     grabFocus: root.shouldOpen && !root.isSubmenu
 
+    // A submenu always opens off the side of its parent row. The root menu opens
+    // off the tray icon, so in a vertical bar it goes sideways for the same reason
+    // a Popout does — see Config.barPopupEdge.
+    readonly property bool sideways: root.isSubmenu || Config.barVertical
+    readonly property int rootEdge: root.isSubmenu ? Edges.Right : Config.barPopupEdge
+
     anchor.item: root.anchorItem
-    anchor.edges: root.isSubmenu ? (Edges.Right | Edges.Top) : Edges.Bottom
-    anchor.gravity: root.isSubmenu ? (Edges.Right | Edges.Bottom) : Edges.Bottom
-    anchor.margins.top: root.isSubmenu ? 0 : Theme.sp2
-    anchor.adjustment: root.isSubmenu ? (PopupAdjustment.SlideY | PopupAdjustment.FlipX) : (PopupAdjustment.SlideX | PopupAdjustment.FlipY)
+    anchor.edges: root.isSubmenu ? (Edges.Right | Edges.Top) : root.rootEdge
+    anchor.gravity: root.isSubmenu ? (Edges.Right | Edges.Bottom) : root.rootEdge
+    anchor.margins.top: root.sideways ? 0 : Theme.sp2
+    anchor.margins.left: (!root.isSubmenu && root.rootEdge === Edges.Right) ? Theme.sp2 : 0
+    anchor.margins.right: (!root.isSubmenu && root.rootEdge === Edges.Left) ? Theme.sp2 : 0
+    anchor.adjustment: root.sideways ? (PopupAdjustment.SlideY | PopupAdjustment.FlipX) : (PopupAdjustment.SlideX | PopupAdjustment.FlipY)
 
     implicitWidth: root.menuWidth
     implicitHeight: panel.implicitHeight

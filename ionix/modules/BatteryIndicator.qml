@@ -31,12 +31,13 @@ Item {
     readonly property color stateColour: root.charging ? Theme.green : Theme.levelColour(root.percent / 100)
 
     visible: root.present
-    implicitWidth: root.present ? button.implicitWidth : 0
-    implicitHeight: Theme.pillHeight
+    implicitWidth: button.implicitWidth
+    implicitHeight: button.implicitHeight
 
     IconButton {
         id: button
         anchors.fill: parent
+        vertical: Config.barVertical
         colour: root.stateColour
         hoverColour: root.stateColour
         horizontalPadding: Theme.sp3
@@ -57,13 +58,24 @@ Item {
 
         onClicked: Popouts.toggle("power", root.bar?.screen)
 
-        Row {
+        // The gauge is drawn into IconButton's overlay slot rather than being a
+        // glyph, so the button has no content of its own to measure and its own
+        // implicit size would come out as bare padding. Stating it here from the
+        // gauge is what keeps the module from underlapping what it draws.
+        implicitWidth: Config.barVertical ? Theme.pillHeight : gauge.implicitWidth + button.horizontalPadding * 2
+        implicitHeight: Config.barVertical ? gauge.implicitHeight + button.horizontalPadding * 2 : Theme.pillHeight
+
+        Grid {
+            id: gauge
             anchors.centerIn: parent
+            rows: Config.barVertical ? 2 : 1
+            columns: Config.barVertical ? 1 : 2
+            horizontalItemAlignment: Grid.AlignHCenter
+            verticalItemAlignment: Grid.AlignVCenter
             spacing: Theme.sp2
 
             // ── The battery ────────────────────────────────────────────────
             Item {
-                anchors.verticalCenter: parent.verticalCenter
                 width: 24
                 height: 12
 
@@ -142,16 +154,19 @@ Item {
                 }
             }
 
-            // Percentage, revealed on hover so the bar stays quiet the rest of the time.
+            // Percentage, revealed on hover so the bar stays quiet the rest of the
+            // time. It collapses along whichever axis the gauge runs, so the
+            // reveal pushes the bar's neighbours rather than the battery outline.
             Text {
-                anchors.verticalCenter: parent.verticalCenter
+                id: percentLabel
                 text: `${Math.round(root.percent)}%`
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fsSm
                 font.weight: Font.DemiBold
                 color: root.stateColour
                 opacity: button.hovered || root.critical ? 1 : 0
-                width: opacity > 0 ? implicitWidth : 0
+                width: (Config.barVertical || opacity > 0) ? implicitWidth : 0
+                height: (!Config.barVertical || opacity > 0) ? implicitHeight : 0
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -159,6 +174,12 @@ Item {
                     }
                 }
                 Behavior on width {
+                    NumberAnimation {
+                        duration: Theme.durNormal
+                        easing.type: Theme.easeStandard
+                    }
+                }
+                Behavior on height {
                     NumberAnimation {
                         duration: Theme.durNormal
                         easing.type: Theme.easeStandard

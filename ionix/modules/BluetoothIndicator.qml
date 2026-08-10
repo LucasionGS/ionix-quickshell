@@ -20,12 +20,13 @@ Item {
 
     // No adapter at all (desktop without a dongle, or a VM) — take up no space.
     visible: Config.bluetooth.enabled && !!root.adapter
-    implicitWidth: visible ? button.implicitWidth : 0
-    implicitHeight: Theme.pillHeight
+    implicitWidth: button.implicitWidth
+    implicitHeight: button.implicitHeight
 
     IconButton {
         id: button
         anchors.fill: parent
+        vertical: Config.barVertical
         active: root.popoutOpen
         icon: Icons.bluetooth(root.enabled, root.connected.length)
         colour: {

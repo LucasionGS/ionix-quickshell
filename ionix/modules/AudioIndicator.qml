@@ -18,11 +18,12 @@ Item {
     readonly property real level: Math.min(1, Audio.volume / Math.max(0.01, Audio.maxVolume))
 
     implicitWidth: button.implicitWidth
-    implicitHeight: Theme.pillHeight
+    implicitHeight: button.implicitHeight
 
     IconButton {
         id: button
         anchors.fill: parent
+        vertical: Config.barVertical
         icon: Icons.volume(Audio.volume, Audio.muted, Audio.portType)
         colour: Audio.muted ? Theme.border : Theme.red
         hoverColour: Audio.muted ? Theme.muted : Theme.textBright

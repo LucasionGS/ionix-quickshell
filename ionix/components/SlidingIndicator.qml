@@ -11,20 +11,27 @@ import qs.config
 Rectangle {
     id: root
 
-    // Geometry of the item to track, in the parent's coordinate space.
+    // Geometry of the item to track, in the parent's coordinate space. All four
+    // are stated by the caller — the blob slides along the bar's long axis and
+    // spans its short one, and which is which depends on the bar's orientation.
     property real targetX: 0
+    property real targetY: 0
     property real targetWidth: 0
+    property real targetHeight: 0
+    property bool vertical: false
     property bool active: true
     property color colourStart: Theme.accentBright
     property color colourEnd: Theme.link
 
     x: root.targetX
+    y: root.targetY
     width: root.targetWidth
-    opacity: root.active && root.targetWidth > 0 ? 1 : 0
-    radius: height / 2
+    height: root.targetHeight
+    opacity: root.active && root.targetWidth > 0 && root.targetHeight > 0 ? 1 : 0
+    radius: Math.min(width, height) / 2
 
     gradient: Gradient {
-        orientation: Gradient.Horizontal
+        orientation: root.vertical ? Gradient.Vertical : Gradient.Horizontal
         GradientStop {
             position: 0.0
             color: Theme.alpha(root.colourStart, 0.30)
@@ -44,7 +51,19 @@ Rectangle {
             easing.type: Theme.easeStandard
         }
     }
+    Behavior on y {
+        NumberAnimation {
+            duration: Theme.durSlide
+            easing.type: Theme.easeStandard
+        }
+    }
     Behavior on width {
+        NumberAnimation {
+            duration: Theme.durSlide
+            easing.type: Theme.easeStandard
+        }
+    }
+    Behavior on height {
         NumberAnimation {
             duration: Theme.durSlide
             easing.type: Theme.easeStandard

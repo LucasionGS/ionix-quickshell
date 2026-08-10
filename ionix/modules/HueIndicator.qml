@@ -14,12 +14,13 @@ Item {
     readonly property bool popoutOpen: Popouts.isOpen("hue", root.bar?.screen)
 
     visible: Config.hue.enabled
-    implicitWidth: visible ? button.implicitWidth : 0
-    implicitHeight: Theme.pillHeight
+    implicitWidth: button.implicitWidth
+    implicitHeight: button.implicitHeight
 
     IconButton {
         id: button
         anchors.fill: parent
+        vertical: Config.barVertical
 
         active: root.popoutOpen
         icon: Icons.hue(Hue.anyOn, Hue.phase === "ready", Hue.stale)

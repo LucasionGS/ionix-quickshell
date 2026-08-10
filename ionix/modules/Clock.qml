@@ -13,8 +13,10 @@ Item {
     property var bar: null
     readonly property bool popoutOpen: Popouts.isOpen("calendar", root.bar?.screen)
 
+    readonly property bool vertical: Config.barVertical
+
     implicitWidth: pill.implicitWidth
-    implicitHeight: Theme.pillHeight
+    implicitHeight: pill.implicitHeight
 
     // Ticking once a minute rather than once a second: the bar shows HH:mm, so a
     // 1Hz timer would be 59 wakeups an hour for nothing. The calendar popout runs
@@ -29,15 +31,22 @@ Item {
         anchors.fill: parent
         accented: true
         interactive: true
+        vertical: root.vertical
         hovered: mouse.containsMouse || root.popoutOpen
-        padding: Theme.sp5
+        // A vertical bar has no room to spare on its short axis, and this padding
+        // is the pill's inset on both — sp5 either side would eat 32 of 46px.
+        padding: root.vertical ? Theme.sp2 : Theme.sp5
 
+        // Already a column in both orientations; only the formats change, because
+        // "HH:mm" at the bar font is wider than a 46px vertical bar.
         Column {
             spacing: -1
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: Qt.formatDateTime(clock.date, Config.clock.format)
+                horizontalAlignment: Text.AlignHCenter
+                lineHeight: 0.95
+                text: Qt.formatDateTime(clock.date, root.vertical ? Config.clock.verticalFormat : Config.clock.format)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fsLg
                 font.weight: Font.DemiBold
@@ -47,7 +56,9 @@ Item {
             Text {
                 visible: Config.clock.showDate
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: Qt.formatDateTime(clock.date, Config.clock.dateFormat)
+                horizontalAlignment: Text.AlignHCenter
+                lineHeight: 0.95
+                text: Qt.formatDateTime(clock.date, root.vertical ? Config.clock.verticalDateFormat : Config.clock.dateFormat)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fsXs
                 color: Theme.muted

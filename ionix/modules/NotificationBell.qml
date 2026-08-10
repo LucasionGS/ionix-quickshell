@@ -13,11 +13,12 @@ Item {
     readonly property bool popoutOpen: Popouts.isOpen("notifications", root.bar?.screen)
 
     implicitWidth: button.implicitWidth
-    implicitHeight: Theme.pillHeight
+    implicitHeight: button.implicitHeight
 
     IconButton {
         id: button
         anchors.fill: parent
+        vertical: Config.barVertical
         icon: Notifications.dnd ? Icons.bellDnd : Icons.bell
         active: root.popoutOpen
         colour: Notifications.dnd ? Theme.muted : Theme.accentBright

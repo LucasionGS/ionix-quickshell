@@ -70,43 +70,63 @@ Item {
     }
 
     readonly property int activeIndex: root.items.findIndex(i => i.active)
+    readonly property bool vertical: Config.barVertical
+
+    // Thickness of the dot strip on the bar's short axis, the same either way.
+    readonly property int lane: Theme.pillHeight - 8
 
     implicitWidth: pill.implicitWidth
-    implicitHeight: Theme.pillHeight
+    implicitHeight: pill.implicitHeight
 
     Pill {
         id: pill
         anchors.fill: parent
+        vertical: root.vertical
         padding: Theme.sp2
 
         Item {
-            implicitWidth: dotsRow.width
-            width: dotsRow.width
-            height: Theme.pillHeight - 8
-            anchors.verticalCenter: parent.verticalCenter
+            implicitWidth: root.vertical ? root.lane : dotsRow.width
+            implicitHeight: root.vertical ? dotsRow.height : root.lane
+            width: implicitWidth
+            height: implicitHeight
 
             // Single blob rather than a border per item: one thing to animate, and
             // it reads as the indicator moving rather than two things blinking.
             SlidingIndicator {
-                height: parent.height
-                anchors.verticalCenter: parent.verticalCenter
+                vertical: root.vertical
                 active: root.activeIndex >= 0
                 targetX: {
-                    if (root.activeIndex < 0)
+                    if (root.vertical || root.activeIndex < 0)
                         return 0;
-                    const item = dots.itemAt(root.activeIndex);
-                    return item ? item.x : 0;
+                    return dots.itemAt(root.activeIndex)?.x ?? 0;
+                }
+                targetY: {
+                    if (!root.vertical || root.activeIndex < 0)
+                        return 0;
+                    return dots.itemAt(root.activeIndex)?.y ?? 0;
                 }
                 targetWidth: {
+                    if (root.vertical)
+                        return root.lane;
                     if (root.activeIndex < 0)
                         return 0;
-                    const item = dots.itemAt(root.activeIndex);
-                    return item ? item.width : 0;
+                    return dots.itemAt(root.activeIndex)?.width ?? 0;
+                }
+                targetHeight: {
+                    if (!root.vertical)
+                        return root.lane;
+                    if (root.activeIndex < 0)
+                        return 0;
+                    return dots.itemAt(root.activeIndex)?.height ?? 0;
                 }
             }
 
-            Row {
+            Grid {
                 id: dotsRow
+                rows: root.vertical ? Math.max(1, root.items.length) : 1
+                columns: root.vertical ? 1 : Math.max(1, root.items.length)
+                horizontalItemAlignment: Grid.AlignHCenter
+                verticalItemAlignment: Grid.AlignVCenter
                 spacing: 0
 
                 Repeater {
@@ -121,10 +141,21 @@ Item {
                         readonly property bool isActive: modelData.active
                         readonly property bool hovered: dotMouse.containsMouse
 
-                        width: isActive ? 34 : (modelData.occupied ? 26 : 20)
-                        height: Theme.pillHeight - 8
+                        // The dot grows along the bar's long axis; the other axis
+                        // is the lane. 34/26/20 read as active / has windows /
+                        // empty without needing a second cue.
+                        readonly property int span: isActive ? 34 : (modelData.occupied ? 26 : 20)
+
+                        width: root.vertical ? root.lane : span
+                        height: root.vertical ? span : root.lane
 
                         Behavior on width {
+                            NumberAnimation {
+                                duration: Theme.durSlide
+                                easing.type: Theme.easeStandard
+                            }
+                        }
+                        Behavior on height {
                             NumberAnimation {
                                 duration: Theme.durSlide
                                 easing.type: Theme.easeStandard
@@ -196,6 +227,7 @@ Item {
 
                         Tooltip {
                             target: dot
+                            sideways: root.vertical
                             shown: dot.hovered
                             text: {
                                 const ws = dot.modelData.workspace;
