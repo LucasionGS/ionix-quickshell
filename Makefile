@@ -68,3 +68,8 @@ check:
 	else \
 		echo "shell loaded clean"; rm -f "$$tmp"; \
 	fi
+
+clean:
+	@rm -rf src/ pkg/
+	@rm ionix-quickshell-git-*.pkg.tar.zst || true
+	@echo "Cleaned installation build"
