@@ -63,8 +63,12 @@ PopupWindow {
 
     visible: root.shouldOpen || closeHold.running
     color: "transparent"
-    // Take keyboard focus so Escape and text fields work inside the panel.
+    // Take keyboard focus so Escape and text fields work inside the panel. The bar
+    // only advertises keyboard interactivity while a surface says it wants it, so
+    // saying so here is what makes that focus arrive at all.
     grabFocus: root.shouldOpen
+    onGrabFocusChanged: ShellFocus.hold(root, root.grabFocus)
+    Component.onDestruction: ShellFocus.hold(root, false)
 
     anchor.item: root.anchorItem
     anchor.gravity: Config.barPopupEdge

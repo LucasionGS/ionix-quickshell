@@ -26,6 +26,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Widgets
 import qs.config
+import qs.services
 
 PopupWindow {
     id: root
@@ -61,7 +62,12 @@ PopupWindow {
 
     visible: root.shouldOpen
     color: "transparent"
+    // Registered with ShellFocus for the same reason a Popout is: the bar only
+    // advertises keyboard interactivity while something asks for it, and Escape
+    // here needs it.
     grabFocus: root.shouldOpen
+    onGrabFocusChanged: ShellFocus.hold(root, root.grabFocus)
+    Component.onDestruction: ShellFocus.hold(root, false)
 
     // Anchored the same way a Popout is — the only caller is the taskbar, which is
     // a bar item, so a vertical bar has to push the menu sideways too.
