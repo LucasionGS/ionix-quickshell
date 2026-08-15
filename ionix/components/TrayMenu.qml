@@ -19,6 +19,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Widgets
 import qs.config
+import qs.services
 
 PopupWindow {
     id: root
@@ -81,8 +82,11 @@ PopupWindow {
     visible: root.shouldOpen && root.menuHandle !== null
     color: "transparent"
     // Only the root takes keyboard focus; a submenu grabbing it would steal the
-    // parent's grab and collapse the chain.
+    // parent's grab and collapse the chain. Registering that with ShellFocus is
+    // what gets the bar to advertise keyboard interactivity while the chain is up.
     grabFocus: root.shouldOpen && !root.isSubmenu
+    onGrabFocusChanged: ShellFocus.hold(root, root.grabFocus)
+    Component.onDestruction: ShellFocus.hold(root, false)
 
     // A submenu always opens off the side of its parent row. The root menu opens
     // off the tray icon, so in a vertical bar it goes sideways for the same reason

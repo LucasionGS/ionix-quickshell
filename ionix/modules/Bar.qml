@@ -46,7 +46,13 @@ PanelWindow {
     // OnDemand rather than None: popups of this surface inherit its focus policy,
     // and a popup that cannot take keyboard focus has its grab cleared the instant
     // it opens — which closes it again. It also lets the Wi-Fi password field type.
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    //
+    // Only while one is open, though. OnDemand also parks Hyprland's keyboard focus
+    // on the layer as soon as the bar is clicked at all, and Hyprland will not hand
+    // focus to a window that maps while a layer surface holds it — so an app started
+    // from the bar or the start menu opened unfocused until the pointer moved. See
+    // ShellFocus, which every focus-grabbing surface registers with.
+    WlrLayershell.keyboardFocus: ShellFocus.wanted ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     // Stretched along its long axis and docked to one edge on the short one.
     anchors {
