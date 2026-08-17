@@ -17,7 +17,7 @@
 pkgname=ionix-quickshell-git
 _pkgname=ionix-quickshell
 # Placeholder only; pkgver() below overwrites it on every build.
-pkgver=r20.9a40fa2
+pkgver=r22.0201e5f
 pkgrel=1
 pkgdesc="Ionix Quickshell desktop shell — bar, popouts and OSD (git)"
 arch=('any')
