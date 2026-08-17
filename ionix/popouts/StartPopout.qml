@@ -246,6 +246,25 @@ Popout {
                     subtitle: "Volume and brightness overlay"
                 }
             ]
+        },
+        {
+            title: "Windows",
+            rows: [
+                {
+                    section: "windowSwitcher",
+                    key: "enabled",
+                    glyph: Icons.window,
+                    title: "Alt-Tab switcher",
+                    subtitle: "Overlay with live window previews"
+                },
+                {
+                    section: "windowSwitcher",
+                    key: "currentWorkspaceOnly",
+                    glyph: Icons.dockWindow,
+                    title: "Current workspace only",
+                    subtitle: "Off means every window, most recent first"
+                }
+            ]
         }
     ]
 

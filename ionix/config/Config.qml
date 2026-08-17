@@ -177,6 +177,21 @@ Singleton {
                 timeout: 1600,
                 margin: 120
             },
+            windowSwitcher: {
+                enabled: true,
+                // false = every window everywhere, MRU across workspaces —
+                // matches what the old direct-focus Alt+Tab bind reached. True
+                // narrows to the focused workspace, Windows-style.
+                currentWorkspaceOnly: false,
+                // Escape hatch: every visible card is a continuous screencopy
+                // stream, and toplevel export is the least battle-tested part of
+                // the stack. False falls back to icon tiles wholesale.
+                livePreviews: true,
+                cardWidth: 240,
+                cardHeight: 170,
+                // Fraction of the screen the card grid may span before wrapping.
+                maxWidthFraction: 0.8
+            },
             power: {
                 lock: ["hyprlock", "-c", "/etc/hypr/hyprlock.conf", "--grace", "2"],
                 logout: ["uwsm", "stop"],
@@ -237,6 +252,7 @@ Singleton {
     readonly property var battery: data.battery
     readonly property var notifications: data.notifications
     readonly property var osd: data.osd
+    readonly property var windowSwitcher: data.windowSwitcher
     readonly property var power: data.power
 
     // ── Bar orientation ─────────────────────────────────────────────────────

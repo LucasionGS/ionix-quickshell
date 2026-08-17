@@ -169,6 +169,16 @@
     "margin": 120
   },
 
+  "windowSwitcher": {
+    "_comment": "The Alt+Tab overlay. currentWorkspaceOnly:false offers every window everywhere in most-recently-used order, which is what the pre-overlay Alt+Tab bind reached; true narrows it to the focused workspace, Windows-style. livePreviews:false swaps the screencopy thumbnails for icon tiles — each visible card is otherwise a continuous capture stream. maxWidthFraction is of the screen width; past that the card grid wraps to further rows.",
+    "enabled": true,
+    "currentWorkspaceOnly": false,
+    "livePreviews": true,
+    "cardWidth": 240,
+    "cardHeight": 170,
+    "maxWidthFraction": 0.8
+  },
+
   "power": {
     "lock": ["hyprlock", "-c", "/etc/hypr/hyprlock.conf", "--grace", "2"],
     "logout": ["uwsm", "stop"],
