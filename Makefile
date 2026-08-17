@@ -73,3 +73,10 @@ clean:
 	@rm -rf src/ pkg/
 	@rm ionix-quickshell-git-*.pkg.tar.zst || true
 	@echo "Cleaned installation build"
+
+buildinstall:
+	@systemctl --user stop ionix-quickshell.service
+	@$(MAKE) clean
+	@# perform the installation steps
+	@makepkg -si --noconfirm
+	@systemctl --user start ionix-quickshell.service

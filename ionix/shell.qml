@@ -38,6 +38,14 @@ ShellRoot {
         delegate: NotificationToasts {}
     }
 
+    // Alt+Tab switcher — one fullscreen overlay per screen, but only the screen
+    // the session opened on ever shows it (see SwitcherOverlay).
+    Variants {
+        model: Config.windowSwitcher.enabled ? Quickshell.screens : []
+
+        delegate: SwitcherOverlay {}
+    }
+
     // Optional user extension, loaded as-is when the file exists.
     Loader {
         source: userProbe.loaded ? `file://${Config.userDir}/user.qml` : ""
@@ -180,6 +188,38 @@ ShellRoot {
         }
         function count(): int {
             return Notifications.count;
+        }
+    }
+
+    // The Alt+Tab binds land here, one call per Tab press — the overlay itself
+    // never sees Tab, the compositor bind consumes it. commit exists for the
+    // Alt-release bind and must stay a cheap no-op when nothing is open; peek
+    // and status are for driving a session from a terminal while developing.
+    // (peek, not show: `show` is the qs ipc CLI's own listing verb, and calling
+    // a function by that name prints the handler listing instead.)
+    IpcHandler {
+        target: "switcher"
+
+        function next(): void {
+            WindowSwitcher.next();
+        }
+        function prev(): void {
+            WindowSwitcher.prev();
+        }
+        function commit(): void {
+            WindowSwitcher.commit();
+        }
+        function cancel(): void {
+            WindowSwitcher.cancel();
+        }
+        function peek(): void {
+            WindowSwitcher.open();
+        }
+        function list(): string {
+            return WindowSwitcher.buildWindows().map(t => `${t.address} wl=${t.wayland ? "y" : "n"} mapped=${t.lastIpcObject?.mapped} act=${t.activated} urg=${WindowSwitcher.isUrgent(t)} ${Windows.appId(t)} | ${t.title}`).join("\n");
+        }
+        function status(): string {
+            return `active=${WindowSwitcher.active} selection=${WindowSwitcher.selection}/${WindowSwitcher.windows.length} mru=${WindowSwitcher.mru.length}`;
         }
     }
 
