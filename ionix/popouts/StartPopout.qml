@@ -248,6 +248,51 @@ Popout {
             ]
         },
         {
+            title: "Calendar",
+            rows: [
+                {
+                    // Local is the built-in calendar; a remote choice keeps it
+                    // and adds that account on top, with a sign-in flow in the
+                    // calendar popout. The provider's own settings (Outlook's
+                    // client id) are config.json keys, not switches — see
+                    // calendar in defaults.json.
+                    section: "calendar",
+                    key: "provider",
+                    glyph: Icons.calendarCheck,
+                    title: "Calendar",
+                    subtitle: "Your events in the popout and clock; Outlook adds work",
+                    choices: [
+                        {
+                            value: "none",
+                            label: "Off"
+                        },
+                        {
+                            value: "local",
+                            label: "Local"
+                        },
+                        {
+                            value: "outlook",
+                            label: "Outlook"
+                        }
+                    ]
+                },
+                {
+                    section: "calendar",
+                    key: "showNext",
+                    glyph: Icons.calendarClock,
+                    title: "Next meeting in the clock",
+                    subtitle: "When it starts within the hour"
+                },
+                {
+                    section: "calendar",
+                    key: "reminders",
+                    glyph: Icons.bell,
+                    title: "Meeting reminders",
+                    subtitle: "A notification a few minutes before"
+                }
+            ]
+        },
+        {
             title: "Windows",
             rows: [
                 {

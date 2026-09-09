@@ -142,6 +142,60 @@ ShellRoot {
         }
     }
 
+    // Calendar: the daemon is the shell's child, so a terminal reaches it
+    // through here rather than by signalling a process it cannot see.
+    IpcHandler {
+        target: "calendar"
+
+        function sync(): void {
+            Calendar.lastSyncRequest = 0;
+            Calendar.sync();
+        }
+        function login(): void {
+            Calendar.login();
+        }
+        function logout(): void {
+            Calendar.logout();
+        }
+        function join(): void {
+            Calendar.join(Calendar.nextEvent);
+        }
+        // add "Title" "2026-09-10 09:00" 30 — a local event from a script.
+        // A date alone makes it all-day.
+        function add(title: string, when: string, minutes: int): void {
+            const w = when.trim();
+            if (w.length <= 10) {
+                Calendar.create({
+                    title: title,
+                    allDay: true,
+                    date: w,
+                    days: 1
+                });
+                return;
+            }
+            const t = new Date(w.replace(" ", "T"));
+            const end = new Date(t.getTime() + Math.max(5, minutes || 30) * 60000);
+            Calendar.create({
+                title: title,
+                date: Qt.formatDate(t, "yyyy-MM-dd"),
+                startTime: Qt.formatTime(t, "HH:mm"),
+                endTime: Qt.formatTime(end, "HH:mm")
+            });
+        }
+        // Open the calendar with the editor on today, for a keybind.
+        function newEvent(): void {
+            Popouts.open("calendar", null);
+            Calendar.openEditor(new Date());
+        }
+        function next(): string {
+            const e = Calendar.nextEvent;
+            return e ? `${Calendar.relative(e.startMs)} ${Calendar.timeOf(e.startMs)} ${e.title}` : "";
+        }
+        function status(): string {
+            return `${Calendar.phase} events=${Calendar.events.length} synced=${Calendar.lastSync} restarts=${Calendar.crashes}${Calendar.error !== "" ? " error=" + Calendar.error : ""}`;
+        }
+    }
+
     IpcHandler {
         target: "popout"
 

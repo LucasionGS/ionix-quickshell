@@ -16,6 +16,13 @@ Replaces waybar in [Ionix](https://github.com/LucasionGS/ionix-iso).
 - **Popouts** — calendar, audio mixer (with per-application volume sliders), Wi-Fi picker with
   inline password entry, bluetooth device manager, media player with album-art backdrop, and a
   power menu.
+- **Calendar** — the popout has a real calendar behind it: dots on busy days, a per-day agenda,
+  and an editor to add, change and delete your own events (all-day or timed, with a location, a
+  meeting link that becomes a **Join** button, and daily/weekly/monthly/yearly repeats). The next
+  meeting shows in the clock pill and a notification reminds you before each one. Your events
+  live in a JSON file under `~/.local/share`. Optionally sign in to **Outlook / Microsoft 365**
+  and your work meetings (Teams links included) join the same list — the daemon is written so
+  other services slot in later.
 - **Philips Hue** — opt-in. Finds and pairs a bridge from the bar, then gives every light
   on/off, brightness, colour and colour temperature, plus the same for all lights at once.
   Pin the ones you actually use; the panel opens on them.
@@ -147,6 +154,82 @@ every call; v1 needs no dependency and covers everything here.
 > looking for `<dir>/ionix/shell.qml` in each XDG config directory in turn. A directory containing
 > only `config.json` has no `shell.qml`, so resolution falls through to `/etc/xdg` and the shipped
 > shell still loads — it just reads your overrides.
+
+### Calendar
+
+On by default as a **local** calendar. The shell runs `ionix-calendar`, a small stdlib-only
+Python daemon, which keeps your events in `$XDG_DATA_HOME/ionix/calendar/local.json` and
+expands them (repeats included) into `$XDG_STATE_HOME/ionix/quickshell/calendar/events.json`,
+which the popout and clock read. Add an event with the **+** beside the day's agenda, click an
+event to edit or delete it; while adding, clicking another day in the grid moves the event
+there. From a terminal or a keybind:
+
+```bash
+ionix-calendar add "Dentist" "2026-09-10 14:00" 45   # 45-minute event
+ionix-calendar add "Trip" "2026-09-12"               # all-day
+ionix-calendar list                                  # upcoming, with ids
+ionix-calendar remove <id>
+qs -c ionix ipc call calendar newEvent               # open the popout on the editor
+```
+
+The settings page's **Calendar** row is *Off / Local / Outlook*. Off stops the daemon and takes
+the calendar out of the popout entirely.
+
+#### Outlook / Microsoft 365
+
+Pick *Outlook* and your work calendar is layered on top of the local one — same list, same
+dots, Teams meetings with a **Join** button, reminders for both. A provider is a Python class
+plus one entry in the settings picker; the QML never learns which service is behind an event.
+
+Microsoft needs an app registration to let anything sign in, and that is the one thing you have
+to do by hand:
+
+1. In [Entra admin center](https://entra.microsoft.com) go to *Identity → Applications →
+   App registrations → New registration*. Any name; *Accounts in this organizational directory
+   only*; no redirect URI.
+2. On the app's *Authentication* page set **Allow public client flows** to *Yes* (the sign-in
+   is the device-code flow).
+3. Under *API permissions* add *Microsoft Graph → Delegated → `Calendars.Read`*.
+4. Copy the *Application (client) ID* into `config.json`:
+
+```jsonc
+{
+  "calendar": {
+    "provider": "outlook",
+    "outlook": {
+      "clientId": "00000000-0000-0000-0000-000000000000",
+      "tenant": "organizations"      // or your tenant id; "consumers" for outlook.com; "common" for both
+    },
+    "calendars": [],                 // include-list of calendar names or ids; [] = all
+    "showNext": true,                // next meeting in the clock pill, within upcomingWindow minutes
+    "upcomingWindow": 60,
+    "reminders": true,               // notification reminderMinutes before each meeting, with Join
+    "reminderMinutes": 5
+  }
+}
+```
+
+Then open the calendar, click **Sign in to Outlook**, enter the code it shows at
+`microsoft.com/devicelogin`, and the work meetings appear beside your own. The token goes into your keyring via
+`secret-tool` when a Secret Service is running, otherwise into a `0600` file next to the
+cache. Sign out from the popout's footer. If your tenant does not let users register apps, ask
+an admin to register one for you — the registration is the only thing that touches the tenant;
+the sign-in is your own account with your own consent. In most tenants `Calendars.Read` also
+needs an admin to grant consent once on that registration (*API permissions → Grant admin
+consent*); Microsoft's "Need admin approval" page at sign-in is how you find out. Teams meetings are ordinary Outlook
+events with a join link, so nothing Teams-specific is needed.
+
+The daemon is usable on its own too:
+
+```bash
+ionix-calendar login        # sign in from a terminal instead of the popout
+ionix-calendar calendars    # list the account's calendars for the include-list
+ionix-calendar sync         # one-shot sync
+ionix-calendar status       # what the popout sees
+qs -c ionix ipc call calendar next    # "in 12m 10:00 Standup"
+qs -c ionix ipc call calendar join    # open the next meeting's link
+```
+
 
 ### Tier 2 — `user.qml` (escape hatch)
 

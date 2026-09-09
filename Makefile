@@ -24,12 +24,13 @@ install:
 	done
 	install -Dm755 bin/ionix-shell-qs   $(BINDIR)/ionix-shell-qs
 	install -Dm755 bin/ionix-shell-fork $(BINDIR)/ionix-shell-fork
+	install -Dm755 bin/ionix-calendar   $(BINDIR)/ionix-calendar
 	install -Dm644 systemd/ionix-quickshell.service $(UNITDIR)/ionix-quickshell.service
 	install -Dm644 LICENSE $(LICDIR)/LICENSE
 
 uninstall:
 	rm -rf $(SHELLDIR)
-	rm -f $(BINDIR)/ionix-shell-qs $(BINDIR)/ionix-shell-fork
+	rm -f $(BINDIR)/ionix-shell-qs $(BINDIR)/ionix-shell-fork $(BINDIR)/ionix-calendar
 	rm -f $(UNITDIR)/ionix-quickshell.service
 	rm -rf $(LICDIR)
 

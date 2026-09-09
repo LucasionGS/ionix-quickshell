@@ -178,6 +178,14 @@ Singleton {
                 run: () => Popouts.open("calendar", null)
             },
             {
+                title: "Join next meeting",
+                subtitle: Calendar.nextEvent ? `${Calendar.nextEvent.title} · ${Calendar.relative(Calendar.nextEvent.startMs)}` : "No meeting coming up",
+                glyph: Icons.video,
+                keywords: ["join", "meeting", "teams", "call"],
+                hidden: !Calendar.ready || !Calendar.nextEvent || Calendar.nextEvent.joinUrl === "",
+                run: () => Calendar.join(Calendar.nextEvent)
+            },
+            {
                 title: "Reload theme",
                 subtitle: "Re-read theme.json and config.json",
                 glyph: Icons.refresh,
@@ -232,6 +240,10 @@ Singleton {
     function actions(q) {
         const rows = [];
         for (const action of root.actionList()) {
+            // An action that has nothing to do right now (no meeting to join)
+            // says so with `hidden` rather than offering a row that does nothing.
+            if (action.hidden === true)
+                continue;
             let score = Apps.matchScore(action.title, q);
             for (const keyword of action.keywords)
                 score = Math.max(score, Apps.matchScore(keyword, q) * 0.95);
