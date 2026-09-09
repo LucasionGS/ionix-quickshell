@@ -165,6 +165,60 @@ Singleton {
                 warnAt: 30,
                 criticalAt: 15
             },
+            calendar: {
+                // none | local | outlook. "local" is the built-in read/write
+                // calendar kept in a JSON file; a remote name adds that account's
+                // events on top of it rather than replacing it. Anything but
+                // "none" starts the ionix-calendar daemon as a child of this
+                // shell — see services/Calendar.qml. Offered as a picker in the
+                // settings page, so this is a default, not a fact.
+                provider: "local",
+                local: {
+                    // "" → $XDG_DATA_HOME/ionix/calendar/local.json
+                    file: "",
+                    name: "Local",
+                    // Hex colour for its dots and icons; "" → the theme accent.
+                    color: ""
+                },
+                // The daemon binary. Only worth changing to point at a checkout.
+                bin: "ionix-calendar",
+                // Seconds between background fetches. Opening the popout forces
+                // one (throttled to once every 30s).
+                syncInterval: 300,
+                // Days of events kept either side of today.
+                pastDays: 31,
+                futureDays: 92,
+                // Include-list of calendar names or ids from the account; empty
+                // means all of them. `ionix-calendar calendars` prints the list.
+                calendars: [],
+                // Drop invitations you declined rather than grey them out.
+                hideDeclined: true,
+                // The clock pill shows the next meeting when it starts within
+                // upcomingWindow minutes. Horizontal bars only — a vertical bar
+                // has no room for a title.
+                showNext: true,
+                upcomingWindow: 60,
+                // Pixels the meeting title may take in the pill before eliding.
+                nextMaxWidth: 140,
+                // A notification reminderMinutes before each timed meeting, with
+                // a Join action when it has a link. 0 minutes also disables it.
+                reminders: true,
+                reminderMinutes: 5,
+                // "" → $XDG_STATE_HOME/ionix/quickshell/calendar. Holds
+                // state.json and events.json, and tokens-<provider>.json when
+                // no Secret Service is running to keep the credential instead.
+                stateDir: "",
+                outlook: {
+                    // Your Entra app registration's Application (client) ID. A
+                    // public client with "Allow public client flows" on — the
+                    // sign-in is the device-code flow. Not a secret.
+                    clientId: "",
+                    // A tenant id or domain, or one of Microsoft's aliases:
+                    // "organizations" (any work account), "consumers"
+                    // (personal outlook.com), "common" (both).
+                    tenant: "organizations"
+                }
+            },
             notifications: {
                 popups: true,
                 timeout: 5000,      // ms a toast stays up; critical ones never expire
@@ -250,6 +304,7 @@ Singleton {
     readonly property var bluetooth: data.bluetooth
     readonly property var hue: data.hue
     readonly property var battery: data.battery
+    readonly property var calendar: data.calendar
     readonly property var notifications: data.notifications
     readonly property var osd: data.osd
     readonly property var windowSwitcher: data.windowSwitcher

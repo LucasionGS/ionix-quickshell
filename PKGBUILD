@@ -35,6 +35,9 @@ depends=(
     'bluez-utils'
     'upower'
     'polkit'
+    # ionix-calendar (the calendar sync daemon) and its meeting reminders.
+    'python'
+    'libnotify'
 )
 optdepends=(
     'swaync: notification centre integration for the bell module'
@@ -47,6 +50,10 @@ optdepends=(
     'ioexplorer-git: application launcher target for the logo button'
     'toxen-mini: Toxen music player integration'
     'ttf-jetbrains-mono-nerd: the glyph font the bar is designed around'
+    'libsecret: keep the calendar sign-in token in the keyring instead of a file'
+    'gnome-keyring: a Secret Service for libsecret to store that token in'
+    'wl-clipboard: copy the calendar sign-in code from the popout'
+    'xdg-utils: open meeting links and the sign-in page in your browser'
 )
 provides=("$_pkgname")
 conflicts=("$_pkgname")

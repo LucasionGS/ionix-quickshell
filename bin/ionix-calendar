@@ -1,0 +1,1344 @@
+#!/usr/bin/env python3
+"""ionix-calendar — calendar sync daemon for the Ionix Quickshell bar.
+
+The shell never speaks to a calendar service itself. This process does, and
+writes what it learns to two files the shell's services/Calendar.qml watches:
+
+    $XDG_STATE_HOME/ionix/quickshell/calendar/state.json    account, phase,
+                                                            sign-in code, errors
+    $XDG_STATE_HOME/ionix/quickshell/calendar/events.json   the events, one
+                                                            provider-neutral schema
+
+Every provider normalises to the same event shape, so the QML side is written
+once. Adding a provider means one `Provider` subclass below and one entry in
+PROVIDERS — nothing in the shell changes except the settings picker offering
+the new name.
+
+There are two kinds of provider. The *local* calendar is a JSON file this
+daemon owns outright, read/write, with simple recurrence; it is present
+whenever the calendar is on at all. A *remote* provider (Outlook) is layered on
+top of it when `calendar.provider` names one, so choosing Outlook adds your
+work meetings to your own events rather than replacing them. Writes from the
+shell (`create`/`update`/`delete` on stdin, JSON payloads) go to whichever
+provider says it is writable — today that is the local one.
+
+Subcommands:
+
+    daemon      Long-running: syncs on an interval and takes commands on
+                stdin — sync, reload, login, cancel, logout, quit, and
+                create/update/delete followed by a JSON payload or an id.
+                Exits on stdin EOF, which is how it dies with the shell.
+    sync        One-shot sync, for scripts and a terminal.
+    login       Interactive sign-in from a terminal (prints the device code).
+    logout      Drop the stored credential.
+    status      Print state.json.
+    calendars   List the remote account's calendars, for the include list.
+    add         add "Title" "YYYY-MM-DD HH:MM" [minutes] — a local event.
+    list        Upcoming local events with their ids.
+    remove      remove <id> — delete a local event (or series).
+
+Configuration is the `calendar` section of the shell's own config files —
+settings.json under config.json, same precedence the shell applies — so there
+is exactly one place to set the provider, whichever side reads it.
+
+No third-party modules on purpose: the sign-in and token refresh are two HTTP
+POSTs each, and a distro package that pulls in msal for that is a dependency
+the ISO would otherwise never carry. Tokens go to the keyring through
+`secret-tool` when a Secret Service is running, else to a 0600 file.
+"""
+
+import base64
+import json
+import os
+import select
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import uuid
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+VERSION = 1
+USER_AGENT = "ionix-calendar/1"
+
+DEFAULTS = {
+    # "none" disables everything (the shell does not even start the daemon);
+    # "local" is the built-in calendar alone; a remote name adds that on top.
+    "provider": "local",
+    "local": {
+        # "" → $XDG_DATA_HOME/ionix/calendar/local.json. Data, not state: it
+        # is the user's own events and belongs in a backup.
+        "file": "",
+        "name": "Local",
+        # Hex colour for its dots and icons; "" → the theme accent.
+        "color": "",
+    },
+    # How often the daemon re-fetches, in seconds. A popout open forces one.
+    "syncInterval": 300,
+    # Window of events kept in events.json, either side of today.
+    "pastDays": 31,
+    "futureDays": 92,
+    # Include-list of calendar names or ids. Empty means every calendar.
+    "calendars": [],
+    # "" → the XDG state dir above.
+    "stateDir": "",
+    "outlook": {
+        # Entra app registration (public client, device-code flow enabled).
+        "clientId": "",
+        # A tenant id/domain, or one of Microsoft's aliases: "organizations"
+        # (any work account), "consumers" (personal), "common" (both).
+        "tenant": "organizations",
+    },
+}
+
+
+# ── Paths and small helpers ────────────────────────────────────────────────
+
+
+def xdg(var, fallback):
+    v = os.environ.get(var, "")
+    if v:
+        return v
+    return os.path.join(os.path.expanduser("~"), fallback)
+
+
+def config_dir():
+    return os.path.join(xdg("XDG_CONFIG_HOME", ".config"), "quickshell", "ionix")
+
+
+def deep_merge(base, overlay):
+    if not isinstance(overlay, dict):
+        return base
+    for k, v in overlay.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            base[k] = deep_merge(base[k], v)
+        elif v is not None:
+            base[k] = v
+    return base
+
+
+def read_json(path, default):
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = f.read()
+    except OSError:
+        return default
+    if not raw.strip():
+        return default
+    try:
+        parsed = json.loads(raw)
+    except ValueError as e:
+        log(f"{path}: invalid JSON, ignoring — {e}")
+        return default
+    return parsed if isinstance(parsed, type(default)) else default
+
+
+def write_json_atomic(path, data, mode=0o644):
+    d = os.path.dirname(path)
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=d)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def log(msg):
+    sys.stderr.write(f"[ionix-calendar] {msg}\n")
+    sys.stderr.flush()
+
+
+def load_config():
+    """The `calendar` section, merged the way the shell merges its layers:
+    settings.json (the GUI) under config.json (the user's own)."""
+    cfg = json.loads(json.dumps(DEFAULTS))
+    for name in ("settings.json", "config.json"):
+        layer = read_json(os.path.join(config_dir(), name), {})
+        section = layer.get("calendar")
+        if isinstance(section, dict):
+            cfg = deep_merge(cfg, json.loads(json.dumps(section)))
+    return cfg
+
+
+def state_dir(cfg):
+    override = cfg.get("stateDir") or ""
+    if override:
+        return os.path.expanduser(override)
+    return os.path.join(xdg("XDG_STATE_HOME", ".local/state"), "ionix", "quickshell", "calendar")
+
+
+def local_zone():
+    """The system zone as an IANA name. Graph wants the name, not an offset,
+    or all-day events land on the wrong day either side of a DST change."""
+    candidates = [os.environ.get("TZ", "")]
+    try:
+        link = os.readlink("/etc/localtime")
+        if "zoneinfo/" in link:
+            candidates.append(link.split("zoneinfo/", 1)[1])
+    except OSError:
+        pass
+    try:
+        with open("/etc/timezone", encoding="utf-8") as f:
+            candidates.append(f.read().strip())
+    except OSError:
+        pass
+    for name in candidates:
+        if not name or name.startswith(":"):
+            continue
+        try:
+            ZoneInfo(name)
+            return name
+        except (ZoneInfoNotFoundError, ValueError):
+            continue
+    return "UTC"
+
+
+def now_iso():
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+# ── HTTP ───────────────────────────────────────────────────────────────────
+
+
+class HttpError(Exception):
+    def __init__(self, status, body):
+        super().__init__(f"HTTP {status}")
+        self.status = status
+        self.body = body
+
+    def describe(self):
+        try:
+            j = json.loads(self.body)
+        except ValueError:
+            return f"HTTP {self.status}"
+        err = j.get("error")
+        if isinstance(err, dict):
+            return err.get("message") or err.get("code") or f"HTTP {self.status}"
+        if isinstance(err, str):
+            desc = j.get("error_description", "").split("\n")[0]
+            # The trace/correlation ids are noise in a 340px panel.
+            return desc.split(" Trace ID:")[0].strip() or err
+        return f"HTTP {self.status}"
+
+
+def http(method, url, headers=None, form=None, timeout=30):
+    data = None
+    hdrs = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    if form is not None:
+        data = urllib.parse.urlencode(form).encode()
+        hdrs["Content-Type"] = "application/x-www-form-urlencoded"
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        raise HttpError(e.code, e.read().decode("utf-8", "replace")) from None
+    if not body:
+        return {}
+    return json.loads(body)
+
+
+# ── Token store ────────────────────────────────────────────────────────────
+
+
+class TokenStore:
+    """One JSON blob per provider, in the Secret Service when there is one.
+
+    The fallback file lives in the state dir at 0600. Both paths are tried on
+    read so a token stored before a keyring existed is still found, and clear()
+    removes both so a sign-out is a sign-out."""
+
+    def __init__(self, sdir, provider):
+        self.provider = provider
+        self.path = os.path.join(sdir, f"tokens-{provider}.json")
+        self.attrs = ["application", "ionix-calendar", "provider", provider]
+        self.have_tool = shutil.which("secret-tool") is not None
+
+    def _tool(self, *args, stdin=None):
+        try:
+            p = subprocess.run(["secret-tool", *args], input=stdin, capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return p
+
+    def load(self):
+        if self.have_tool:
+            p = self._tool("lookup", *self.attrs)
+            if p and p.returncode == 0 and p.stdout.strip():
+                try:
+                    return json.loads(p.stdout)
+                except ValueError:
+                    pass
+        return read_json(self.path, {}) or None
+
+    def save(self, blob):
+        text = json.dumps(blob)
+        if self.have_tool:
+            p = self._tool("store", "--label", f"Ionix calendar ({self.provider})", *self.attrs, stdin=text)
+            if p and p.returncode == 0:
+                # A keyring write supersedes any earlier file fallback.
+                try:
+                    os.unlink(self.path)
+                except OSError:
+                    pass
+                return "keyring"
+            log("secret-tool store failed; falling back to a 0600 file")
+        write_json_atomic(self.path, blob, mode=0o600)
+        return "file"
+
+    def clear(self):
+        if self.have_tool:
+            self._tool("clear", *self.attrs)
+        try:
+            os.unlink(self.path)
+        except OSError:
+            pass
+
+
+# ── Provider interface ─────────────────────────────────────────────────────
+
+
+class AuthError(Exception):
+    """The credential is gone or rejected: the user has to sign in again."""
+
+
+class Provider:
+    """What the daemon needs from a calendar backend. Everything is
+    synchronous; the daemon loop is single-threaded and this keeps it so."""
+
+    name = "generic"
+
+    def __init__(self, cfg, store):
+        self.cfg = cfg
+        self.store = store
+
+    # Sign-in is a two-phase device flow so the popout can show a code:
+    # begin_login returns what to display, poll_login is called on the interval
+    # it names until it reports "done" or "error".
+    def configured(self):
+        return True
+
+    def configure_hint(self):
+        return ""
+
+    def begin_login(self):
+        raise NotImplementedError
+
+    def poll_login(self):
+        raise NotImplementedError
+
+    def cancel_login(self):
+        pass
+
+    def logout(self):
+        self.store.clear()
+
+    def signed_in(self):
+        return bool(self.store.load())
+
+    def account(self):
+        blob = self.store.load() or {}
+        return blob.get("account") or {}
+
+    def list_calendars(self):
+        return []
+
+    def fetch_events(self, start, end, zone):
+        return []
+
+    # Writes. The shell sends the same payload shape whichever provider ends
+    # up storing it — see LocalProvider.normalise for the fields.
+    writable = False
+
+    def create(self, data):
+        raise NotImplementedError
+
+    def update(self, data):
+        raise NotImplementedError
+
+    def delete(self, event_id):
+        raise NotImplementedError
+
+
+class CalendarError(Exception):
+    """A write the user asked for cannot be done as given; shown in the panel."""
+
+
+def data_dir():
+    return os.path.join(xdg("XDG_DATA_HOME", ".local/share"), "ionix", "calendar")
+
+
+def add_months(d, months):
+    """Same day-of-month `months` later, clamped to the month's length."""
+    y = d.year + (d.month - 1 + months) // 12
+    m = (d.month - 1 + months) % 12 + 1
+    last = [31, 29 if (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]
+    return d.replace(year=y, month=m, day=min(d.day, last))
+
+
+# ── Local calendar ─────────────────────────────────────────────────────────
+
+
+class LocalProvider(Provider):
+    """A JSON file of the user's own events, expanded to occurrences.
+
+    Timed events are stored as ISO strings with their offset, all-day events as
+    dates (end exclusive, like Graph and iCalendar). Recurrence is the simple
+    kind — every N days/weeks/months/years, optionally until a date — computed
+    on wall-clock time so a 09:00 weekly stays 09:00 across a DST change.
+    Editing an occurrence edits its series; there are no exceptions yet.
+    """
+
+    name = "local"
+    writable = True
+    FREQS = ("daily", "weekly", "monthly", "yearly")
+
+    def __init__(self, cfg, zone):
+        super().__init__(cfg, None)
+        lc = cfg.get("local") or {}
+        self.path = os.path.expanduser(lc.get("file") or "") or os.path.join(data_dir(), "local.json")
+        self.calendar_name = str(lc.get("name") or "Local")
+        self.color = str(lc.get("color") or "")
+        self.zone = zone
+        self.tz = ZoneInfo(zone)
+
+    def configured(self):
+        return True
+
+    def signed_in(self):
+        return True
+
+    def calendar(self):
+        return {"id": "local", "name": self.calendar_name, "color": self.color, "default": True}
+
+    def mtime(self):
+        try:
+            return os.stat(self.path).st_mtime
+        except OSError:
+            return 0.0
+
+    # ── Store ──
+
+    def load(self):
+        doc = read_json(self.path, {})
+        events = doc.get("events") if isinstance(doc, dict) else None
+        return [e for e in (events or []) if isinstance(e, dict) and e.get("id")]
+
+    def save(self, events):
+        write_json_atomic(self.path, {"version": VERSION, "events": events}, mode=0o600)
+
+    # ── Normalising what the shell sends ──
+
+    def _time(self, text):
+        raw = str(text or "").strip().replace(".", ":")
+        if raw == "":
+            raise CalendarError("Missing time")
+        if ":" not in raw:
+            raw = raw.zfill(4) if len(raw) > 2 else raw + ":00"
+            if ":" not in raw:
+                raw = raw[:2] + ":" + raw[2:]
+        try:
+            h, m = raw.split(":")[:2]
+            h, m = int(h), int(m)
+        except ValueError:
+            raise CalendarError(f'Bad time "{text}"') from None
+        if not (0 <= h < 24 and 0 <= m < 60):
+            raise CalendarError(f'Bad time "{text}"')
+        return h, m
+
+    def _date(self, text):
+        try:
+            return datetime.strptime(str(text or "").strip()[:10], "%Y-%m-%d").date()
+        except ValueError:
+            raise CalendarError(f'Bad date "{text}"') from None
+
+    def normalise(self, data, existing=None):
+        """Payload → stored event. Two ways to give the time: `date` plus
+        `startTime`/`endTime` (what the editor sends, resolved in the local
+        zone) or `start`/`end` ISO strings (what scripts send). All-day events
+        take `date` and `days`."""
+        if not isinstance(data, dict):
+            raise CalendarError("Payload is not an object")
+        ev = dict(existing or {})
+        title = str(data.get("title", ev.get("title", ""))).strip()
+        if title == "":
+            raise CalendarError("An event needs a title")
+        ev["title"] = title
+        ev["allDay"] = bool(data.get("allDay", ev.get("allDay", False)))
+        for key in ("location", "url", "notes"):
+            if key in data:
+                ev[key] = str(data.get(key) or "").strip()
+            else:
+                ev.setdefault(key, "")
+
+        if ev["allDay"]:
+            if "date" in data:
+                d0 = self._date(data["date"])
+            elif "start" in data:
+                d0 = self._date(data["start"])
+            else:
+                d0 = self._date(ev.get("start"))
+            try:
+                days = max(1, int(data.get("days", 0) or 0))
+            except (TypeError, ValueError):
+                days = 1
+            if "days" not in data and "end" in data:
+                days = max(1, (self._date(data["end"]) - d0).days)
+            elif "days" not in data and existing and existing.get("allDay"):
+                days = max(1, (self._date(existing.get("end")) - self._date(existing.get("start"))).days)
+            ev["start"] = d0.isoformat()
+            ev["end"] = (d0 + timedelta(days=days)).isoformat()
+        else:
+            if "startTime" in data or "endTime" in data:
+                d0 = self._date(data.get("date") or ev.get("start") or datetime.now(self.tz).date().isoformat())
+                h1, m1 = self._time(data.get("startTime", "09:00"))
+                h2, m2 = self._time(data.get("endTime", "10:00"))
+                start = datetime(d0.year, d0.month, d0.day, h1, m1, tzinfo=self.tz)
+                end = datetime(d0.year, d0.month, d0.day, h2, m2, tzinfo=self.tz)
+                if end <= start:
+                    end += timedelta(days=1)
+            else:
+                start = self._parse_dt(data.get("start", ev.get("start")))
+                end = self._parse_dt(data.get("end", ev.get("end"))) if (data.get("end") or ev.get("end")) else start + timedelta(minutes=30)
+                if end <= start:
+                    end = start + timedelta(minutes=30)
+            ev["start"] = start.isoformat(timespec="seconds")
+            ev["end"] = end.isoformat(timespec="seconds")
+
+        if "repeat" in data:
+            rep = data.get("repeat")
+            freq = str((rep or {}).get("freq", "") if isinstance(rep, dict) else rep or "").lower()
+            if freq in ("", "none", "no", "once"):
+                ev["repeat"] = None
+            elif freq in self.FREQS:
+                try:
+                    interval = max(1, int((rep or {}).get("interval", 1) if isinstance(rep, dict) else 1))
+                except (TypeError, ValueError):
+                    interval = 1
+                until = (rep or {}).get("until") if isinstance(rep, dict) else None
+                ev["repeat"] = {"freq": freq, "interval": interval, "until": self._date(until).isoformat() if until else None}
+            else:
+                raise CalendarError(f'Unknown repeat "{freq}"')
+        else:
+            ev.setdefault("repeat", None)
+        return ev
+
+    def _parse_dt(self, text):
+        raw = str(text or "").strip()
+        if raw == "":
+            raise CalendarError("Missing start")
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                dt = datetime.strptime(raw, "%Y-%m-%d %H:%M")
+            except ValueError:
+                raise CalendarError(f'Bad datetime "{text}"') from None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=self.tz)
+        return dt.astimezone(self.tz)
+
+    # ── Writes ──
+
+    def create(self, data):
+        events = self.load()
+        ev = self.normalise(data)
+        ev["id"] = uuid.uuid4().hex[:12]
+        ev["created"] = now_iso()
+        ev["updated"] = ev["created"]
+        events.append(ev)
+        self.save(events)
+        return ev["id"]
+
+    def update(self, data):
+        event_id = str((data or {}).get("id") or "")
+        events = self.load()
+        for i, old in enumerate(events):
+            if old.get("id") == event_id:
+                ev = self.normalise(data, old)
+                ev["id"] = event_id
+                ev["updated"] = now_iso()
+                events[i] = ev
+                self.save(events)
+                return event_id
+        raise CalendarError("That event no longer exists")
+
+    def delete(self, event_id):
+        events = self.load()
+        kept = [e for e in events if e.get("id") != event_id]
+        if len(kept) == len(events):
+            raise CalendarError("That event no longer exists")
+        self.save(kept)
+
+    # ── Expansion ──
+
+    def fetch_events(self, start, end, zone):
+        out = []
+        for ev in self.load():
+            try:
+                out.extend(self._occurrences(ev, start, end))
+            except (ValueError, TypeError, CalendarError) as e:
+                log(f"local event {ev.get('id')} skipped: {e}")
+        return [self.calendar()], out
+
+    def _occurrences(self, ev, start, end):
+        all_day = bool(ev.get("allDay"))
+        if all_day:
+            d0 = self._date(ev["start"])
+            d1 = self._date(ev["end"]) if ev.get("end") else d0 + timedelta(days=1)
+            base_start = datetime(d0.year, d0.month, d0.day, tzinfo=self.tz)
+            base_end = datetime(d1.year, d1.month, d1.day, tzinfo=self.tz)
+        else:
+            base_start = self._parse_dt(ev["start"])
+            base_end = self._parse_dt(ev.get("end")) if ev.get("end") else base_start + timedelta(minutes=30)
+        # Wall-clock arithmetic: shift naive local times, then re-attach the
+        # zone, so the offset is whatever applies on the occurrence's day.
+        naive_start = base_start.replace(tzinfo=None)
+        duration = base_end.replace(tzinfo=None) - naive_start
+
+        rep = ev.get("repeat") if isinstance(ev.get("repeat"), dict) else None
+        freq = (rep or {}).get("freq")
+        if freq not in self.FREQS:
+            occ = self._occurrence(ev, base_start, base_end, None, all_day)
+            return [occ] if base_start < end and base_end > start else []
+
+        interval = max(1, int(rep.get("interval", 1) or 1))
+        until = None
+        if rep.get("until"):
+            u = self._date(rep["until"])
+            until = datetime(u.year, u.month, u.day, tzinfo=self.tz) + timedelta(days=1)
+
+        out = []
+        n = 0
+        # Skip straight to the window for the day-based frequencies rather
+        # than walking a years-old daily event one step at a time.
+        if freq in ("daily", "weekly"):
+            step_days = interval * (7 if freq == "weekly" else 1)
+            behind = (start.replace(tzinfo=None) - (naive_start + duration)).days
+            if behind > 0:
+                n = max(0, behind // step_days - 1)
+        while n < 5000:
+            if freq == "daily":
+                s = naive_start + timedelta(days=n * interval)
+            elif freq == "weekly":
+                s = naive_start + timedelta(days=7 * n * interval)
+            elif freq == "monthly":
+                s = add_months(naive_start, n * interval)
+            else:
+                s = add_months(naive_start, 12 * n * interval)
+            occ_start = s.replace(tzinfo=self.tz)
+            occ_end = (s + duration).replace(tzinfo=self.tz)
+            n += 1
+            if occ_start >= end or (until and occ_start >= until):
+                break
+            if occ_end <= start:
+                continue
+            out.append(self._occurrence(ev, occ_start, occ_end, s.date().isoformat(), all_day))
+        return out
+
+    def _occurrence(self, ev, s, e, occ_key, all_day):
+        url = ev.get("url") or ""
+        return {
+            "id": ev["id"] if occ_key is None else f"{ev['id']}@{occ_key}",
+            "seriesId": ev["id"],
+            # The series' own first date, which is what an edit of a repeating
+            # event has to send back — an occurrence's date would move it.
+            "seriesDate": str(ev.get("start", ""))[:10],
+            "source": "local",
+            "editable": True,
+            "calendarId": "local",
+            "calendarName": self.calendar_name,
+            "color": self.color,
+            "title": ev.get("title") or "(No title)",
+            "start": s.isoformat(timespec="seconds"),
+            "end": e.isoformat(timespec="seconds"),
+            "allDay": all_day,
+            "location": ev.get("location") or "",
+            "online": url != "",
+            "joinUrl": url,
+            "showAs": "busy",
+            "cancelled": False,
+            "organizer": "",
+            "response": "accepted",
+            "webLink": "",
+            "notes": ev.get("notes") or "",
+            "repeat": ev.get("repeat") if isinstance(ev.get("repeat"), dict) else None,
+        }
+
+
+# ── Outlook / Microsoft Graph ──────────────────────────────────────────────
+
+
+class OutlookProvider(Provider):
+    name = "outlook"
+    GRAPH = "https://graph.microsoft.com/v1.0"
+    SCOPES = "openid profile email offline_access https://graph.microsoft.com/Calendars.Read"
+
+    def __init__(self, cfg, store):
+        super().__init__(cfg, store)
+        o = cfg.get("outlook") or {}
+        self.client_id = (o.get("clientId") or "").strip()
+        self.tenant = (o.get("tenant") or "organizations").strip()
+        self.authority = f"https://login.microsoftonline.com/{self.tenant}/oauth2/v2.0"
+        self.device = None
+        self._access = None  # (token, expires_at) for this process
+
+    def configured(self):
+        return self.client_id != ""
+
+    def configure_hint(self):
+        return 'Set calendar.outlook.clientId in config.json to your Entra app registration'
+
+    # ── Auth ──
+
+    def begin_login(self):
+        j = http("POST", f"{self.authority}/devicecode", form={"client_id": self.client_id, "scope": self.SCOPES})
+        self.device = {
+            "deviceCode": j["device_code"],
+            "interval": int(j.get("interval", 5)),
+            "expiresAt": time.time() + int(j.get("expires_in", 900)),
+        }
+        return {
+            "userCode": j["user_code"],
+            "verificationUri": j.get("verification_uri", "https://microsoft.com/devicelogin"),
+            "expiresAt": datetime.fromtimestamp(self.device["expiresAt"], timezone.utc).astimezone().isoformat(timespec="seconds"),
+            "interval": self.device["interval"],
+            "message": j.get("message", ""),
+        }
+
+    def poll_login(self):
+        if not self.device:
+            return "error", "No sign-in in progress"
+        if time.time() > self.device["expiresAt"]:
+            self.device = None
+            return "error", "The sign-in code expired"
+        try:
+            j = http("POST", f"{self.authority}/token", form={
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                "client_id": self.client_id,
+                "device_code": self.device["deviceCode"],
+            })
+        except HttpError as e:
+            try:
+                err = json.loads(e.body).get("error", "")
+            except ValueError:
+                err = ""
+            if err == "authorization_pending":
+                return "pending", ""
+            if err == "slow_down":
+                self.device["interval"] += 5
+                return "pending", ""
+            self.device = None
+            if err == "authorization_declined":
+                return "error", "Sign-in was declined"
+            if err == "expired_token":
+                return "error", "The sign-in code expired"
+            return "error", e.describe()
+        self.device = None
+        self._adopt_tokens(j)
+        return "done", ""
+
+    def cancel_login(self):
+        self.device = None
+
+    def _adopt_tokens(self, j):
+        blob = self.store.load() or {}
+        blob["refresh_token"] = j.get("refresh_token") or blob.get("refresh_token")
+        blob["access_token"] = j.get("access_token")
+        blob["expires_at"] = time.time() + int(j.get("expires_in", 3600)) - 60
+        blob["clientId"] = self.client_id
+        blob["tenant"] = self.tenant
+        if j.get("id_token"):
+            claims = self._claims(j["id_token"])
+            blob["account"] = {
+                "name": claims.get("name", ""),
+                "email": claims.get("preferred_username") or claims.get("email", ""),
+                "tenantId": claims.get("tid", ""),
+            }
+        self.store.save(blob)
+        self._access = (blob["access_token"], blob["expires_at"])
+
+    @staticmethod
+    def _claims(id_token):
+        # Display only, never authorisation — so the signature is not checked.
+        try:
+            payload = id_token.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            return json.loads(base64.urlsafe_b64decode(payload))
+        except (IndexError, ValueError):
+            return {}
+
+    def _token(self):
+        blob = self.store.load()
+        if not blob or not blob.get("refresh_token"):
+            raise AuthError("Not signed in")
+        if blob.get("access_token") and time.time() < float(blob.get("expires_at", 0)):
+            return blob["access_token"]
+        try:
+            j = http("POST", f"{self.authority}/token", form={
+                "grant_type": "refresh_token",
+                "client_id": self.client_id,
+                "refresh_token": blob["refresh_token"],
+                "scope": self.SCOPES,
+            })
+        except HttpError as e:
+            try:
+                err = json.loads(e.body).get("error", "")
+            except ValueError:
+                err = ""
+            # invalid_grant: revoked, expired or the consent was withdrawn.
+            # Anything else (network, 5xx) is a transient and keeps the token.
+            if err in ("invalid_grant", "interaction_required", "invalid_client"):
+                raise AuthError(e.describe()) from None
+            raise
+        self._adopt_tokens(j)
+        return j["access_token"]
+
+    def _get(self, url, zone=None):
+        headers = {"Authorization": f"Bearer {self._token()}"}
+        if zone:
+            headers["Prefer"] = f'outlook.timezone="{zone}"'
+        try:
+            return http("GET", url, headers=headers)
+        except HttpError as e:
+            if e.status == 401:
+                # The access token was rejected outright; force a refresh on
+                # the next call by dropping the cached one.
+                blob = self.store.load() or {}
+                blob.pop("access_token", None)
+                blob["expires_at"] = 0
+                self.store.save(blob)
+                raise AuthError(e.describe()) from None
+            raise
+
+    # ── Data ──
+
+    def list_calendars(self):
+        j = self._get(f"{self.GRAPH}/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar&$top=100")
+        out = []
+        for c in j.get("value", []):
+            out.append({
+                "id": c.get("id", ""),
+                "name": c.get("name", ""),
+                "color": (c.get("hexColor") or "") if c.get("hexColor") not in (None, "", "#") else "",
+                "default": bool(c.get("isDefaultCalendar")),
+            })
+        return out
+
+    def fetch_events(self, start, end, zone):
+        wanted = [str(x) for x in (self.cfg.get("calendars") or [])]
+        calendars = self.list_calendars()
+        if wanted:
+            calendars = [c for c in calendars if c["id"] in wanted or c["name"] in wanted]
+        select = ",".join([
+            "id", "subject", "start", "end", "isAllDay", "location", "isOnlineMeeting",
+            "onlineMeeting", "onlineMeetingUrl", "showAs", "isCancelled", "organizer",
+            "responseStatus", "webLink", "seriesMasterId", "sensitivity",
+        ])
+        events = []
+        for cal in calendars:
+            url = (f"{self.GRAPH}/me/calendars/{urllib.parse.quote(cal['id'], safe='')}/calendarView"
+                   f"?startDateTime={urllib.parse.quote(start.isoformat())}"
+                   f"&endDateTime={urllib.parse.quote(end.isoformat())}"
+                   f"&$select={select}&$orderby=start/dateTime&$top=250")
+            while url:
+                j = self._get(url, zone)
+                for e in j.get("value", []):
+                    events.append(self._event(e, cal, zone))
+                url = j.get("@odata.nextLink")
+        return calendars, events
+
+    @staticmethod
+    def _when(field, zone):
+        # Graph gives "2026-09-09T10:00:00.0000000" in the zone the Prefer
+        # header asked for; datetime wants at most microseconds.
+        raw = (field or {}).get("dateTime", "")
+        if not raw:
+            return None
+        head, _, frac = raw.partition(".")
+        if frac:
+            raw = f"{head}.{frac[:6]}"
+        try:
+            naive = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        tz = (field or {}).get("timeZone") or zone
+        try:
+            z = ZoneInfo(tz)
+        except (ZoneInfoNotFoundError, ValueError):
+            z = ZoneInfo(zone)
+        return naive.replace(tzinfo=z)
+
+    def _event(self, e, cal, zone):
+        start = self._when(e.get("start"), zone)
+        end = self._when(e.get("end"), zone)
+        loc = (e.get("location") or {}).get("displayName") or ""
+        join = (e.get("onlineMeeting") or {}).get("joinUrl") or e.get("onlineMeetingUrl") or ""
+        organizer = ((e.get("organizer") or {}).get("emailAddress") or {})
+        private = e.get("sensitivity") in ("private", "confidential")
+        return {
+            "id": e.get("id", ""),
+            "seriesId": e.get("seriesMasterId") or e.get("id", ""),
+            "source": "outlook",
+            "editable": False,
+            "calendarId": cal["id"],
+            "calendarName": cal["name"],
+            "color": cal["color"],
+            "title": e.get("subject") or ("Private" if private else "(No title)"),
+            "start": start.isoformat(timespec="seconds") if start else "",
+            "end": end.isoformat(timespec="seconds") if end else "",
+            "allDay": bool(e.get("isAllDay")),
+            "location": loc,
+            "online": bool(e.get("isOnlineMeeting")) or join != "",
+            "joinUrl": join,
+            "showAs": e.get("showAs") or "busy",
+            "cancelled": bool(e.get("isCancelled")),
+            "organizer": organizer.get("name") or organizer.get("address") or "",
+            "response": (e.get("responseStatus") or {}).get("response") or "none",
+            "webLink": e.get("webLink") or "",
+        }
+
+
+PROVIDERS = {
+    "outlook": OutlookProvider,
+}
+
+
+# ── The daemon ─────────────────────────────────────────────────────────────
+
+
+class Daemon:
+    def __init__(self):
+        self.cfg = load_config()
+        self.sdir = state_dir(self.cfg)
+        self.state_path = os.path.join(self.sdir, "state.json")
+        self.events_path = os.path.join(self.sdir, "events.json")
+        self.zone = local_zone()
+        self.local = None
+        self.remote = None
+        # Last good remote fetch, reused when a sync only needs to re-expand
+        # the local file (an edit) so an edit never costs a Graph round trip.
+        self.remote_cache = None
+        self.local_mtime = -1.0
+        self.state = {
+            "version": VERSION,
+            "provider": "none",
+            "phase": "none",
+            "account": {},
+            "signin": None,
+            "calendars": [],
+            "lastSync": "",
+            "lastAttempt": "",
+            "error": "",
+            "zone": self.zone,
+            "pid": os.getpid(),
+        }
+        self.next_poll = 0.0
+        self.next_sync = 0.0
+        # In daemon mode every file write is announced on stdout ("state" or
+        # "events") so the shell can re-read without relying on inotify
+        # catching a rename in a directory that may not have existed yet.
+        self.announce = False
+        self.reload()
+
+    # ── State ──
+
+    def reload(self):
+        """Re-read the config and pick the providers it names. Called on start
+        and before every sync, so a provider change lands without a restart.
+
+        `phase` describes the *remote* provider; the local calendar has no
+        phases. With provider=local it is simply "ready"."""
+        self.cfg = load_config()
+        name = str(self.cfg.get("provider") or "none")
+        if name == "none":
+            self.local = None
+            self.remote = None
+            self.remote_cache = None
+            self.set(phase="none", provider="none", error="", signin=None)
+            return
+        if self.local is None or self.local.cfg != self.cfg:
+            self.local = LocalProvider(self.cfg, self.zone)
+        if name == "local":
+            self.remote = None
+            self.remote_cache = None
+            if self.state["phase"] != "ready" or self.state["provider"] != "local":
+                self.set(phase="ready", provider="local", error="", signin=None, account={}, calendars=[self.local.calendar()])
+            return
+        cls = PROVIDERS.get(name)
+        if cls is None:
+            self.remote = None
+            self.remote_cache = None
+            self.set(phase="unconfigured", provider=name, error=f'Unknown provider "{name}"')
+            return
+        if self.remote is None or self.remote.name != name or self.remote.cfg != self.cfg:
+            self.remote = cls(self.cfg, TokenStore(self.sdir, name))
+            self.remote_cache = None
+        if not self.remote.configured():
+            self.set(phase="unconfigured", provider=name, error=self.remote.configure_hint())
+        elif self.state["phase"] == "signin":
+            pass
+        elif self.remote.signed_in():
+            if self.state["phase"] not in ("ready", "syncing") or self.state["provider"] != name:
+                self.set(phase="ready", provider=name, error="", account=self.remote.account())
+        else:
+            self.remote_cache = None
+            self.set(phase="signedout", provider=name, account={}, signin=None)
+
+    def set(self, **patch):
+        self.state.update(patch)
+        self.state["pid"] = os.getpid()
+        write_json_atomic(self.state_path, self.state)
+        self.tell("state")
+
+    def tell(self, what):
+        if self.announce:
+            sys.stdout.write(what + "\n")
+            sys.stdout.flush()
+
+    # ── Sync ──
+
+    def window(self):
+        zone = ZoneInfo(self.zone)
+        today = datetime.now(zone).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = today - timedelta(days=int(self.cfg.get("pastDays", 31)))
+        end = today + timedelta(days=int(self.cfg.get("futureDays", 92)) + 1)
+        return start, end
+
+    def sync(self, refresh_remote=True):
+        """Rebuild events.json: the local calendar's occurrences plus, when a
+        remote is signed in, its events — freshly fetched, or from the cache
+        when `refresh_remote` is false."""
+        self.reload()
+        if self.local is None:
+            return False
+        start, end = self.window()
+        calendars, events = self.local.fetch_events(start, end, self.zone)
+        self.local_mtime = self.local.mtime()
+        remote_ok = True
+
+        if self.remote is not None and self.remote.configured() and self.remote.signed_in():
+            if refresh_remote or self.remote_cache is None:
+                remote_ok = self.fetch_remote(start, end)
+            if self.remote_cache is not None:
+                rcal, rev = self.remote_cache
+                calendars = calendars + rcal
+                events = events + rev
+
+        events.sort(key=lambda ev: (ev["start"], ev["end"]))
+        write_json_atomic(self.events_path, {
+            "version": VERSION,
+            "provider": self.state["provider"],
+            "sources": ["local"] + ([self.state["provider"]] if self.remote_cache else []),
+            "generatedAt": now_iso(),
+            "zone": self.zone,
+            "rangeStart": start.isoformat(timespec="seconds"),
+            "rangeEnd": end.isoformat(timespec="seconds"),
+            "calendars": calendars,
+            "events": events,
+        })
+        self.tell("events")
+        if self.remote is None:
+            self.set(lastSync=now_iso(), calendars=calendars)
+        return remote_ok
+
+    def fetch_remote(self, start, end):
+        self.set(phase="syncing", lastAttempt=now_iso())
+        try:
+            rcal, rev = self.remote.fetch_events(start, end, self.zone)
+            self.remote_cache = (rcal, rev)
+            self.set(phase="ready", lastSync=now_iso(), error="", calendars=[self.local.calendar()] + rcal, account=self.remote.account())
+            log(f"synced {len(rev)} {self.remote.name} events from {len(rcal)} calendar(s)")
+            return True
+        except AuthError as e:
+            # The refresh token is dead; keeping it would only repeat this
+            # failure every interval, so drop it and ask for a fresh sign-in.
+            log(f"auth: {e}")
+            self.remote.store.clear()
+            self.remote_cache = None
+            self.set(phase="signedout", account={}, error=f"Signed out: {e}")
+        except HttpError as e:
+            log(f"sync failed: {e.describe()}")
+            self.set(phase="ready", error=e.describe())
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            log(f"sync failed: {e}")
+            self.set(phase="ready", error=f"Offline: {getattr(e, 'reason', e)}")
+        except Exception as e:  # noqa: BLE001 — the daemon must not die on a bad payload
+            log(f"sync failed: {e!r}")
+            self.set(phase="ready", error=f"Sync failed: {e}")
+        return False
+
+    # ── Writes ──
+
+    def writer(self):
+        for p in (self.remote, self.local):
+            if p is not None and p.writable:
+                return p
+        raise CalendarError("No writable calendar")
+
+    def write(self, op, payload):
+        """create/update take a JSON object, delete an id. Errors land in the
+        state's `error` so the panel can show them; a success clears it."""
+        try:
+            w = self.writer()
+            if op == "delete":
+                w.delete(str(payload).strip())
+            else:
+                try:
+                    data = json.loads(payload) if isinstance(payload, str) else payload
+                except ValueError as e:
+                    raise CalendarError(f"Bad payload: {e}") from None
+                (w.create if op == "create" else w.update)(data)
+            if self.state.get("error", "").startswith("Calendar: "):
+                self.set(error="")
+            self.sync(refresh_remote=False)
+            return True
+        except CalendarError as e:
+            log(f"{op} failed: {e}")
+            self.set(error=f"Calendar: {e}")
+        except OSError as e:
+            log(f"{op} failed: {e}")
+            self.set(error=f"Calendar: cannot write {getattr(e, 'filename', '')}: {e.strerror or e}")
+        return False
+
+    # ── Sign-in ──
+
+    def begin_login(self):
+        self.reload()
+        if self.remote is None or not self.remote.configured():
+            return
+        try:
+            info = self.remote.begin_login()
+        except HttpError as e:
+            self.set(phase="signedout", error=e.describe())
+            return
+        except (urllib.error.URLError, OSError) as e:
+            self.set(phase="signedout", error=f"Offline: {getattr(e, 'reason', e)}")
+            return
+        self.set(phase="signin", signin=info, error="")
+        self.next_poll = time.time() + info["interval"]
+
+    def poll_login(self):
+        try:
+            status, msg = self.remote.poll_login()
+        except (urllib.error.URLError, OSError) as e:
+            status, msg = "pending", ""
+            log(f"poll: {e}")
+        if status == "pending":
+            self.next_poll = time.time() + (self.remote.device or {}).get("interval", 5)
+            return
+        if status == "error":
+            self.set(phase="signedout", signin=None, error=msg)
+            return
+        self.set(phase="ready", signin=None, error="", account=self.remote.account())
+        self.sync()
+        self.next_sync = time.time() + self.interval()
+
+    def cancel_login(self):
+        if self.remote:
+            self.remote.cancel_login()
+        if self.state["phase"] == "signin":
+            self.set(phase="signedout", signin=None, error="")
+
+    def logout(self):
+        if self.remote:
+            self.remote.cancel_login()
+            self.remote.logout()
+        self.remote_cache = None
+        self.set(phase="signedout", signin=None, account={}, lastSync="", error="")
+        self.sync(refresh_remote=False)
+
+    def interval(self):
+        try:
+            return max(60, int(self.cfg.get("syncInterval", 300)))
+        except (TypeError, ValueError):
+            return 300
+
+    # ── Loop ──
+
+    def run(self):
+        self.announce = True
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+        signal.signal(signal.SIGHUP, lambda *_: None)
+        self.sync()
+        self.next_sync = time.time() + self.interval()
+        stdin = sys.stdin
+        while True:
+            timeout = self.next_sync - time.time()
+            if self.state["phase"] == "signin":
+                timeout = min(timeout, self.next_poll - time.time())
+            timeout = max(0.2, min(timeout, 30.0))
+            ready, _, _ = select.select([stdin], [], [], timeout)
+            if ready:
+                line = stdin.readline()
+                if line == "":
+                    return  # EOF: the shell is gone
+                self.command(line.rstrip("\n"))
+            now = time.time()
+            if self.state["phase"] == "signin" and now >= self.next_poll:
+                self.poll_login()
+            if now >= self.next_sync:
+                self.sync()
+                self.next_sync = time.time() + self.interval()
+            elif self.local is not None and self.local.mtime() != self.local_mtime:
+                # Edited by hand, or synced in from another machine.
+                self.sync(refresh_remote=False)
+
+    def command(self, line):
+        cmd, _, rest = line.strip().partition(" ")
+        cmd = cmd.lower()
+        if cmd == "sync":
+            self.sync()
+            self.next_sync = time.time() + self.interval()
+        elif cmd == "reload":
+            # The shell saw config.json change. Only refetch if that changed
+            # anything for us, so an unrelated edit costs no Graph call.
+            before = json.dumps(self.cfg, sort_keys=True)
+            self.reload()
+            if json.dumps(self.cfg, sort_keys=True) != before:
+                self.sync()
+                self.next_sync = time.time() + self.interval()
+        elif cmd in ("create", "update", "delete"):
+            self.write(cmd, rest)
+        elif cmd == "login":
+            if self.state["phase"] != "signin":
+                self.begin_login()
+        elif cmd == "cancel":
+            self.cancel_login()
+        elif cmd == "logout":
+            self.logout()
+        elif cmd == "quit":
+            sys.exit(0)
+        elif cmd != "":
+            log(f"unknown command: {cmd}")
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────
+
+
+def cmd_login(d):
+    d.begin_login()
+    if d.state["phase"] != "signin":
+        print(d.state.get("error") or "Cannot sign in with the current configuration", file=sys.stderr)
+        return 1
+    info = d.state["signin"]
+    print(info.get("message") or f"Open {info['verificationUri']} and enter the code {info['userCode']}")
+    while d.state["phase"] == "signin":
+        time.sleep(max(1, d.next_poll - time.time()))
+        d.poll_login()
+    if d.state["phase"] == "ready":
+        acct = d.state.get("account") or {}
+        print(f"Signed in as {acct.get('name') or acct.get('email') or 'unknown'}")
+        return 0
+    print(d.state.get("error") or "Sign-in failed", file=sys.stderr)
+    return 1
+
+
+def cmd_add(d, args):
+    if len(args) < 2:
+        print('usage: ionix-calendar add "Title" "YYYY-MM-DD HH:MM" [minutes]', file=sys.stderr)
+        return 2
+    title, when = args[0], args[1]
+    minutes = int(args[2]) if len(args) > 2 else 30
+    if d.local is None:
+        print("The calendar is off (calendar.provider is none)", file=sys.stderr)
+        return 1
+    try:
+        start = d.local._parse_dt(when)
+        data = {"title": title, "start": start.isoformat(), "end": (start + timedelta(minutes=minutes)).isoformat()}
+        if len(when.strip()) == 10:
+            data = {"title": title, "allDay": True, "date": when.strip(), "days": 1}
+        event_id = d.local.create(data)
+    except CalendarError as e:
+        print(e, file=sys.stderr)
+        return 1
+    d.sync(refresh_remote=False)
+    print(event_id)
+    return 0
+
+
+def cmd_list(d):
+    if d.local is None:
+        print("The calendar is off (calendar.provider is none)", file=sys.stderr)
+        return 1
+    start, end = d.window()
+    _, events = d.local.fetch_events(start, end, d.zone)
+    now = datetime.now(ZoneInfo(d.zone))
+    for e in sorted(events, key=lambda e: e["start"]):
+        if datetime.fromisoformat(e["end"]) < now:
+            continue
+        rep = f"  (every {e['repeat']['interval']} {e['repeat']['freq'][:-2]})" if e.get("repeat") and e["repeat"]["interval"] > 1 else (f"  ({e['repeat']['freq']})" if e.get("repeat") else "")
+        when = e["start"][:10] if e["allDay"] else e["start"][:16].replace("T", " ")
+        print(f"{when}  {e['title']}{rep}\n    id: {e['seriesId']}")
+    return 0
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else "status"
+    if cmd in ("-h", "--help", "help"):
+        print(__doc__)
+        return 0
+    d = Daemon()
+    if cmd == "daemon":
+        d.run()
+        return 0
+    if cmd == "sync":
+        return 0 if d.sync() else 1
+    if cmd == "login":
+        return cmd_login(d)
+    if cmd == "logout":
+        d.logout()
+        print("Signed out")
+        return 0
+    if cmd == "status":
+        print(json.dumps(d.state, indent=2))
+        return 0
+    if cmd == "add":
+        return cmd_add(d, argv[2:])
+    if cmd == "list":
+        return cmd_list(d)
+    if cmd == "remove":
+        if len(argv) < 3 or d.local is None:
+            print("usage: ionix-calendar remove <id>", file=sys.stderr)
+            return 2
+        try:
+            d.local.delete(argv[2])
+        except CalendarError as e:
+            print(e, file=sys.stderr)
+            return 1
+        d.sync(refresh_remote=False)
+        print("Removed")
+        return 0
+    if cmd == "calendars":
+        if d.remote is None or not d.remote.signed_in():
+            print("No remote account signed in", file=sys.stderr)
+            return 1
+        for c in d.remote.list_calendars():
+            flag = " (default)" if c["default"] else ""
+            print(f"{c['name']}{flag}\n    id: {c['id']}")
+        return 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except KeyboardInterrupt:
+        sys.exit(130)

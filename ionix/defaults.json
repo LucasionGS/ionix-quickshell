@@ -155,6 +155,32 @@
     "criticalAt": 15
   },
 
+  "calendar": {
+    "_comment": "provider is none | local | outlook, and is offered as a picker in the settings page. local is the built-in read/write calendar (a JSON file, local.file, with simple daily/weekly/monthly/yearly repeats — add and edit events from the popout, or `ionix-calendar add`); a remote provider adds its account's events on top of the local ones rather than replacing them. Anything but none starts the ionix-calendar daemon as a child of the shell; it syncs every syncInterval seconds (and when the popout opens) into $XDG_STATE_HOME/ionix/quickshell/calendar/, which the popout reads — dots on days, a per-day agenda, a Join button on events with a link. showNext puts the next meeting in the clock pill when it starts within upcomingWindow minutes; reminders sends a notification reminderMinutes before each meeting. calendars is an include-list of calendar names or ids (`ionix-calendar calendars` prints them); empty means all. For outlook, clientId is your Entra app registration's Application (client) ID — a public client with device-code flow allowed, not a secret — and tenant is a tenant id/domain or organizations | consumers | common. Tokens go to the keyring via secret-tool, or a 0600 file under stateDir when there is no Secret Service.",
+    "provider": "local",
+    "local": {
+      "file": "",
+      "name": "Local",
+      "color": ""
+    },
+    "bin": "ionix-calendar",
+    "syncInterval": 300,
+    "pastDays": 31,
+    "futureDays": 92,
+    "calendars": [],
+    "hideDeclined": true,
+    "showNext": true,
+    "upcomingWindow": 60,
+    "nextMaxWidth": 140,
+    "reminders": true,
+    "reminderMinutes": 5,
+    "stateDir": "",
+    "outlook": {
+      "clientId": "",
+      "tenant": "organizations"
+    }
+  },
+
   "notifications": {
     "popups": true,
     "timeout": 5000,
