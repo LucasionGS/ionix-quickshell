@@ -83,7 +83,7 @@
   },
 
   "start": {
-    "_comment": "The start menu behind the logo button. enabled:false gives the button back to launcher.command. maxHeightFraction is of the screen height — past that the menu body scrolls instead of growing. defaultPins is only a seed: as soon as you pin or unpin anything the list moves to $XDG_STATE_HOME/ionix/quickshell/start.json, which also holds the launch counts behind the Frequent section. Pins are desktop-entry ids without the '.desktop' suffix; ones naming apps you don't have are skipped, not drawn empty.",
+    "_comment": "The start menu behind the logo button. enabled:false gives the button back to launcher.command. maxHeightFraction is of the screen height — past that the menu body scrolls instead of growing. defaultPins is only a seed: as soon as you pin or unpin anything the list moves to $XDG_STATE_HOME/ionix/quickshell/start.json, which also holds the launch counts behind the Frequent section. Pins are desktop-entry ids without the '.desktop' suffix; ones naming apps you don't have are skipped, not drawn empty. The footer is titled with displayName, or when that is empty the account's full name (chfn -f), or the login; whenever the title is not the login, the login shows under it as user@host. avatar is a picture path (~ allowed); empty means the first of $XDG_CONFIG_HOME/quickshell/avatar.png and ~/.face that exists, re-checked every time the menu opens.",
     "enabled": true,
     "width": 620,
     "maxHeightFraction": 0.72,
@@ -92,6 +92,8 @@
     "showRunning": true,
     "recommend": "frequent",
     "recommendCount": 8,
+    "displayName": "",
+    "avatar": "",
     "defaultPins": ["io.github.ionix.IoExplorer", "kitty", "firefox", "code", "tabby", "steam"],
     "stylerDir": "/usr/local/share/ionix/styler",
     "stylerBin": "/usr/local/share/ionix/styler/bin/ionixtheme",

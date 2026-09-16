@@ -9,6 +9,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.config
 
 Singleton {
     id: root
@@ -17,6 +18,21 @@ Singleton {
         const name = Quickshell.env("USER");
         return (name && name !== "") ? name : (Quickshell.env("LOGNAME") ?? "");
     }
+
+    // The GECOS full name (`chfn -f`), or "" when it is unset or just repeats the
+    // login. Asked of getent rather than read from /etc/passwd so a directory
+    // account (LDAP, systemd-homed) gets its name too.
+    property string realName: ""
+
+    // What the start menu titles itself with: a name set in config wins, then the
+    // account's full name, then the login.
+    readonly property string displayName: {
+        const configured = (Config.start.displayName ?? "").trim();
+        if (configured !== "")
+            return configured;
+        return root.realName !== "" ? root.realName : root.user;
+    }
+    readonly property bool showsLogin: root.displayName !== root.user
 
     property string host: ""
     property real uptimeSeconds: 0
@@ -39,15 +55,51 @@ Singleton {
         return `${minutes}m`;
     }
 
-    // ~/.face is the freedesktop convention and what AccountsService copies to.
-    // Probed rather than handed straight to an Image, because Image logs a warning
-    // for a source it cannot open and most users have no avatar at all.
-    readonly property string avatarPath: `${Quickshell.env("HOME")}/.face`
-    property bool hasAvatar: false
-    readonly property string avatar: root.hasAvatar ? `file://${root.avatarPath}` : ""
+    // First existing file wins: an explicit start.avatar, then the shell's own
+    // $XDG_CONFIG_HOME/quickshell/avatar.png, then ~/.face — the freedesktop
+    // convention and what AccountsService copies to. Probed rather than handed
+    // straight to an Image, because Image logs a warning for a source it cannot
+    // open and most users have no avatar at all.
+    //
+    // The probe is a `test -r` loop and not a FileView: a FileView that has
+    // loaded a file does not report a failure when that file is later deleted,
+    // so a removed picture would linger until restart.
+    readonly property var avatarCandidates: {
+        const home = Quickshell.env("HOME");
+        const xdg = Quickshell.env("XDG_CONFIG_HOME");
+        const configBase = (xdg && xdg !== "") ? xdg : home + "/.config";
+        const configured = (Config.start.avatar ?? "").trim().replace(/^~(?=\/|$)/, home);
+        return [configured, `${configBase}/quickshell/avatar.png`, `${home}/.face`].filter(p => p !== "");
+    }
+    property string avatarPath: ""
+    readonly property string avatar: root.avatarPath !== "" ? `file://${root.avatarPath}` : ""
 
-    onTrackingChanged: if (root.tracking)
-        uptimeFile.reload()
+    // Re-probed every time the menu opens, so dropping a picture in place shows up
+    // on the next open without restarting the shell.
+    function probeAvatar() {
+        avatarProbe.running = false;
+        avatarProbe.running = true;
+    }
+
+    onAvatarCandidatesChanged: root.probeAvatar()
+
+    onTrackingChanged: if (root.tracking) {
+        uptimeFile.reload();
+        root.probeAvatar();
+    }
+
+    Process {
+        running: root.user !== ""
+        command: ["getent", "passwd", root.user]
+        stdout: StdioCollector {
+            // name:pw:uid:gid:GECOS:home:shell, and GECOS is itself
+            // "Full Name,room,work phone,home phone".
+            onStreamFinished: {
+                const gecos = (this.text.trim().split(":")[4] ?? "").split(",")[0].trim();
+                root.realName = gecos !== root.user ? gecos : "";
+            }
+        }
+    }
 
     FileView {
         path: "/etc/hostname"
@@ -56,13 +108,15 @@ Singleton {
         onLoaded: root.host = this.text().trim()
     }
 
-    // Existence probe only — the bytes are never read back out of here, the Image
-    // loads the file itself.
-    FileView {
-        path: root.avatarPath
-        printErrors: false
-        onLoaded: root.hasAvatar = true
-        onLoadFailed: root.hasAvatar = false
+    // Prints the first readable candidate, or nothing. The Image loads the file
+    // itself; nothing here reads the bytes.
+    Process {
+        id: avatarProbe
+        running: true
+        command: ["sh", "-c", 'for f in "$@"; do [ -f "$f" ] && [ -r "$f" ] && { printf %s "$f"; exit 0; }; done', "sh", ...root.avatarCandidates]
+        stdout: StdioCollector {
+            onStreamFinished: root.avatarPath = this.text
+        }
     }
 
     FileView {
