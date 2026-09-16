@@ -81,6 +81,10 @@ Singleton {
                 showRunning: true,
                 recommend: "frequent",   // frequent | recent
                 recommendCount: 8,
+                // Footer identity. "" → the account's full name (chfn -f), else the
+                // login. avatar "" → $XDG_CONFIG_HOME/quickshell/avatar.png, else ~/.face.
+                displayName: "",
+                avatar: "",
                 // Seed tiles, used until the user pins something of their own. These
                 // are desktop-entry ids without the ".desktop" suffix, the same form
                 // a window's app_id resolves to. Ids that match nothing installed are

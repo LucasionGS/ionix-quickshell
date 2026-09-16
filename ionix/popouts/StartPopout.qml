@@ -959,8 +959,8 @@ Popout {
                     }
                 }
 
-                // Empty source when there is no ~/.face, so Image never logs a failed
-                // load; the glyph above stays visible in that case.
+                // Empty source when there is no avatar file, so Image never logs a
+                // failed load; the glyph above stays visible in that case.
                 ClippingRectangle {
                     anchors.fill: parent
                     radius: Theme.rRound
@@ -973,6 +973,10 @@ Popout {
                         source: SystemInfo.avatar
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
+                        // Decode at display size, not at whatever resolution the
+                        // photo happens to be.
+                        sourceSize.width: avatarSlot.width * 2
+                        sourceSize.height: avatarSlot.height * 2
                     }
                 }
             }
@@ -984,7 +988,7 @@ Popout {
                 spacing: 0
 
                 Text {
-                    text: SystemInfo.user
+                    text: SystemInfo.displayName
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fsMd
                     font.weight: Font.DemiBold
@@ -995,7 +999,11 @@ Popout {
                     visible: text !== ""
                     text: {
                         const parts = [];
-                        if (SystemInfo.host !== "")
+                        // With a real name in the title, the login moves down here
+                        // as user@host, so both stay on screen.
+                        if (SystemInfo.showsLogin)
+                            parts.push(SystemInfo.host !== "" ? `${SystemInfo.user}@${SystemInfo.host}` : SystemInfo.user);
+                        else if (SystemInfo.host !== "")
                             parts.push(SystemInfo.host);
                         if (SystemInfo.uptime !== "")
                             parts.push(`up ${SystemInfo.uptime}`);
