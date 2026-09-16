@@ -26,6 +26,8 @@ depends=(
     # ionix-calendar (the calendar sync daemon) and its meeting reminders.
     'python'
     'libnotify'
+    # The clock's countdown timer rings with its alarm-clock-elapsed sound.
+    'sound-theme-freedesktop'
 )
 makedepends=('git')
 optdepends=(

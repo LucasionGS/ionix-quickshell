@@ -123,7 +123,15 @@ Singleton {
                 // passes anything it doesn't recognise through as a literal, so
                 // the "\n" survives and Text renders it as two lines.
                 verticalFormat: "HH\nmm",
-                verticalDateFormat: "dd/MM"
+                verticalDateFormat: "dd/MM",
+                // The countdown on the clock's right click. `sound` is played by
+                // pw-play, again every beepGap ms after it ends, until dismissed.
+                // Presets are lengths in seconds offered under the digits.
+                timer: {
+                    sound: "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga",
+                    beepGap: 400,
+                    presets: [60, 300, 600, 1500]
+                }
             },
             audio: {
                 step: 0.02,

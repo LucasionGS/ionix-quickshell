@@ -12,8 +12,8 @@ import Quickshell.Hyprland
 Singleton {
     id: root
 
-    // "" when nothing is open. Otherwise: start, calendar, audio, network,
-    // bluetooth, hue, media, power, notifications.
+    // "" when nothing is open. Otherwise: start, calendar, timer, audio,
+    // network, bluetooth, hue, media, power, notifications.
     property string current: ""
     // Which screen the open popout belongs to, so a click on monitor B doesn't
     // leave monitor A's panel showing. Null means "wherever focus is" — that's
