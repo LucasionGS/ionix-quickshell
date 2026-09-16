@@ -43,6 +43,8 @@ Singleton {
     readonly property string close: "󰅖"
     readonly property string chevronLeft: "󰅁"
     readonly property string chevronRight: "󰅂"
+    readonly property string chevronUp: "󰅃"
+    readonly property string chevronDown: "󰅀"
     readonly property string settings: "󰒓"
     readonly property string speaker: "󰓃"
     readonly property string microphone: "󰍬"
@@ -80,6 +82,10 @@ Singleton {
     readonly property string powerSaver: "󰌪"
     readonly property string balanced: "󰾅"
     readonly property string performance: "󰓅"
+    // Countdown timer on the clock's right click.
+    readonly property string timer: "󱎫"
+    readonly property string timerRing: "󰂞"
+    readonly property string stop: "󰓛"
 
     // ── Workspaces ──────────────────────────────────────────────────────────
     readonly property string wsActive: "󰮯"

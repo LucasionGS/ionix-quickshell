@@ -197,6 +197,27 @@ ShellRoot {
     }
 
     IpcHandler {
+        target: "timer"
+
+        // `qs -c ionix ipc call timer start 300` — seconds; 0 reuses the last length.
+        function start(seconds: int): void {
+            Countdown.start(seconds > 0 ? seconds : undefined);
+        }
+        function toggle(): void {
+            Countdown.toggle();
+        }
+        function reset(): void {
+            Countdown.reset();
+        }
+        function dismiss(): void {
+            Countdown.dismiss();
+        }
+        function status(): string {
+            return `${Countdown.phase} ${Countdown.format(Countdown.remaining)}`;
+        }
+    }
+
+    IpcHandler {
         target: "popout"
 
         function toggle(name: string): void {

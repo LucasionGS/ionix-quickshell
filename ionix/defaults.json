@@ -119,12 +119,17 @@
   },
 
   "clock": {
-    "_comment": "The vertical* formats are used instead when bar.position is left or right: 'HH:mm' at the bar font is wider than a 46px vertical bar, so the parts stack. Qt.formatDateTime passes anything it does not recognise through as a literal, which is how the embedded newline survives.",
+    "_comment": "The vertical* formats are used instead when bar.position is left or right: 'HH:mm' at the bar font is wider than a 46px vertical bar, so the parts stack. Qt.formatDateTime passes anything it does not recognise through as a literal, which is how the embedded newline survives. timer is the countdown on the clock's right click: sound is played with pw-play and repeated beepGap ms after it ends until the pill is clicked; presets are lengths in seconds shown under the digits.",
     "format": "HH:mm",
     "dateFormat": "ddd d MMM",
     "showDate": true,
     "verticalFormat": "HH\nmm",
-    "verticalDateFormat": "dd/MM"
+    "verticalDateFormat": "dd/MM",
+    "timer": {
+      "sound": "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga",
+      "beepGap": 400,
+      "presets": [60, 300, 600, 1500]
+    }
   },
 
   "audio": {
