@@ -21,6 +21,9 @@ PopupWindow {
     property bool shouldOpen: false
     property int panelWidth: 340
     property int padding: Theme.sp6
+    // A picture behind the content; see GlassPanel.
+    property alias backdrop: panel.backdrop
+    property alias backdropDim: panel.backdropDim
 
     // How tall a growing list inside a panel may get before it scrolls instead.
     // Half the screen, so no popout can swallow the desktop however many wi-fi
