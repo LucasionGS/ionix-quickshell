@@ -4,3 +4,5 @@ src/
 *.pkg.tar.*
 *.tar.gz
 *.log
+# Month pictures for the clock popout, when ~/.config/quickshell/ionix is the dev symlink
+/ionix/calendar/

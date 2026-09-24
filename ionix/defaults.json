@@ -182,6 +182,11 @@
     "reminders": true,
     "reminderMinutes": 5,
     "stateDir": "",
+    "backgrounds": {
+      "_comment": "A picture behind the clock popout for the month on show: <dir>/<month>.png (or .jpg/.jpeg/.webp), named january..december or jan..dec, any case. It is cropped to cover the panel and darkened by dim (0 = untouched, 1 = the solid theme background) so the calendar stays readable. A month with no picture keeps the plain glass. dir \"\" means ~/.config/quickshell/ionix/calendar. Dropping a picture in place shows up the next time the popout opens.",
+      "dir": "",
+      "dim": 0.55
+    },
     "outlook": {
       "clientId": "",
       "tenant": "organizations"

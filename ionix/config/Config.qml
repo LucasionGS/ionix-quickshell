@@ -220,6 +220,15 @@ Singleton {
                 // state.json and events.json, and tokens-<provider>.json when
                 // no Secret Service is running to keep the credential instead.
                 stateDir: "",
+                // A picture behind the clock popout for the month on show, from
+                // <dir>/<month>.{png,jpg,jpeg,webp} — "january" or "jan", any
+                // case. A month without one keeps the plain glass. "" →
+                // ~/.config/quickshell/ionix/calendar. dim is how strongly it is
+                // darkened under the text, 0..1.
+                backgrounds: {
+                    dir: "",
+                    dim: 0.55
+                },
                 outlook: {
                     // Your Entra app registration's Application (client) ID. A
                     // public client with "Allow public client flows" on — the

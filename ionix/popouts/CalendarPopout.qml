@@ -11,9 +11,14 @@
 // The editor replaces the agenda in place rather than opening a second window:
 // it is five fields, and a popout already has keyboard focus. While it is open
 // for a new event, clicking a day in the grid moves the event to that day.
+//
+// Each month can have its own picture behind the panel, dropped into
+// calendar.backgrounds.dir as <month>.png/jpg; the one shown follows the month
+// being viewed, not today's.
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.config
 import qs.components
 import qs.services
@@ -22,6 +27,8 @@ Popout {
     id: root
 
     panelWidth: 340
+    backdrop: root.monthBackdrops[root.viewDate.getMonth()] ?? ""
+    backdropDim: Math.max(0, Math.min(1, Config.calendar.backgrounds?.dim ?? 0.55))
 
     // Offset from the current month, moved by the nav buttons and scroll wheel.
     property int monthOffset: 0
@@ -43,6 +50,7 @@ Popout {
             return;
         root.monthOffset = 0;
         root.selectedDate = new Date(clock.date);
+        root.probeBackdrops();
         if (Calendar.remoteReady)
             Calendar.sync();
     }
@@ -1031,6 +1039,56 @@ Popout {
         Quickshell.execDetached(["sh", "-c", "command -v wl-copy >/dev/null 2>&1 && printf %s \"$1\" | wl-copy", "_", code]);
         root.copied = true;
         copiedReset.restart();
+    }
+
+    // ── Month backgrounds ───────────────────────────────────────────────────
+    //
+    // The folder is listed once per open rather than watched, so dropping a
+    // picture in shows up the next time the panel opens. Listed rather than
+    // handed to an Image per month, because Image logs a warning for every
+    // source it cannot open and most months will have no picture at all.
+
+    readonly property string backdropDir: {
+        const home = Quickshell.env("HOME");
+        const configured = (Config.calendar.backgrounds?.dir ?? "").trim().replace(/^~(?=\/|$)/, home);
+        return configured !== "" ? configured : `${Config.userDir}/calendar`;
+    }
+
+    // Month index → file:// URL, for the months that have one.
+    property var monthBackdrops: ({})
+
+    function probeBackdrops() {
+        backdropProbe.running = false;
+        backdropProbe.running = true;
+    }
+
+    onBackdropDirChanged: root.probeBackdrops()
+
+    // English names on purpose: these are filenames, and they should not change
+    // meaning when the locale does.
+    readonly property var monthNames: ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
+
+    function parseBackdrops(listing) {
+        const found = {};
+        for (const path of listing.split("\n")) {
+            const m = path.match(/([^/]+)\.(png|jpe?g|webp)$/i);
+            if (!m)
+                continue;
+            const name = m[1].toLowerCase();
+            const month = root.monthNames.findIndex(n => n === name || n.slice(0, 3) === name);
+            // The glob is sorted, so of "jan.png" and "january.jpg" the first wins.
+            if (month >= 0 && found[month] === undefined)
+                found[month] = "file://" + path.split("/").map(encodeURIComponent).join("/");
+        }
+        return found;
+    }
+
+    Process {
+        id: backdropProbe
+        command: ["sh", "-c", 'for f in "$1"/*; do [ -f "$f" ] && [ -r "$f" ] && printf "%s\n" "$f"; done', "sh", root.backdropDir]
+        stdout: StdioCollector {
+            onStreamFinished: root.monthBackdrops = root.parseBackdrops(this.text)
+        }
     }
 
     // Six weeks of cells, Monday-first, with the neighbouring months greyed rather
