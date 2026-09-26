@@ -217,8 +217,30 @@
     "maxWidthFraction": 0.8
   },
 
+  "lock": {
+    "_comment": "The lock screen, started by `ionix-lock` as its own Quickshell process (lock.qml) — it reads this same merged config, so it wears the active theme and follows it live while locked. background.image and background.video each take a path, or an object keyed by monitor name with \"*\" as the fallback. image may be a directory, which becomes a slideshow advancing every `interval` seconds; \"\" uses whatever awww is showing on that monitor. video is looped and muted, wins over image, needs qt6-multimedia-ffmpeg, and is skipped on battery unless videoOnBattery. blur and dim (0..1) apply while the password card is up. After screensaver.after idle seconds (0 = never) the card fades out, the picture clears and — with motion — slowly pans while the clock wanders. clockFormat \"\" follows clock.format. power adds suspend/restart/shut down buttons (the last two need a second click). fingerprint races fprintd against the password when a reader is present and stays silent when there isn't one.",
+    "background": {
+      "image": "",
+      "video": "",
+      "videoOnBattery": false,
+      "interval": 60,
+      "blur": 0.7,
+      "dim": 0.35
+    },
+    "screensaver": {
+      "after": 15,
+      "motion": true
+    },
+    "clockFormat": "",
+    "dateFormat": "dddd d MMMM",
+    "media": true,
+    "power": true,
+    "fingerprint": true
+  },
+
   "power": {
-    "lock": ["hyprlock", "-c", "/etc/hypr/hyprlock.conf", "--grace", "2"],
+    "_comment": "lock runs ionix-lock, which falls back to hyprlock by itself when the Quickshell lock screen cannot take the lock.",
+    "lock": ["ionix-lock"],
     "logout": ["uwsm", "stop"],
     "suspend": ["systemctl", "suspend"],
     "hibernate": ["systemctl", "hibernate"],

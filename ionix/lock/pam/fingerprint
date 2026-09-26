@@ -1,0 +1,8 @@
+# ionix-lock: the fingerprint check, run alongside the password one rather than
+# stacked in front of it, so the text field never stops taking typing.
+#
+# With no reader or no enrolled finger pam_fprintd fails at once without a
+# prompt, and the lock takes that as "no fingerprint here" and stops asking.
+# After a timeout it is simply started again.
+auth     required  pam_fprintd.so max-tries=3 timeout=60
+account  required  pam_permit.so

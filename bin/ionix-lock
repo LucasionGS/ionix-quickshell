@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# ionix-lock — lock the session with the Ionix Quickshell lock screen.
+#
+# Runs lock.qml from the shell's config tree as its own Quickshell process, so
+# it wears the active theme without sharing the bar's fate. Blocks until the
+# session is unlocked, like hyprlock does.
+#
+# The one job here beyond starting it is making sure the screen actually ends up
+# locked. lock.qml writes "locked" to $XDG_RUNTIME_DIR/ionix-lock.state once the
+# compositor confirms every output is covered; if that hasn't happened within
+# a few seconds — Quickshell missing, a QML error, a compositor without
+# ext-session-lock — the attempt is killed and hyprlock locks instead. A lock
+# screen that fails open is worse than an ugly one.
+#
+#   ionix-lock            lock now
+#   IONIX_LOCK_DEV=1      hot-reload lock.qml while it is up (for working on it)
+
+set -u
+
+runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+state="$runtime/ionix-lock.state"
+
+# One lock at a time: a second press of the keybind, or hypridle firing while
+# already locked, is a no-op rather than a second locker fighting the first.
+exec 9>"$runtime/ionix-lock.lock"
+flock -n 9 || exit 0
+
+fallback() {
+    echo "ionix-lock: $1 — falling back to hyprlock" >&2
+    if command -v hyprlock >/dev/null; then
+        # Held fd 9 goes with it, so the flock above still covers hyprlock.
+        exec hyprlock -c /etc/hypr/hyprlock.conf
+    fi
+    echo "ionix-lock: hyprlock is not installed either; the session is NOT locked" >&2
+    exit 1
+}
+
+# The user's copy wins, the same way `qs -c ionix` resolves it — which is what
+# makes `make dev` cover the lock too. A config dir holding only JSON has no
+# lock.qml and falls through to the packaged one.
+entry=""
+for dir in "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/ionix" /etc/xdg/quickshell/ionix; do
+    if [[ -f "$dir/lock.qml" ]]; then
+        entry="$dir/lock.qml"
+        break
+    fi
+done
+
+[[ -n "$entry" ]] || fallback "no lock.qml found"
+command -v qs >/dev/null || fallback "quickshell is not installed"
+
+rm -f "$state"
+qs --no-color -p "$entry" &
+pid=$!
+
+# 8s: a cold start on a slow disk with four monitors has been seen near 2s.
+for _ in $(seq 80); do
+    if [[ "$(cat "$state" 2>/dev/null)" == locked* ]]; then
+        wait "$pid"
+        # lock.qml ends itself with SIGTERM once it has released the lock, so
+        # the exit status says nothing; the state file does.
+        [[ "$(cat "$state" 2>/dev/null)" == unlocked* ]] && exit 0
+        # Died while locked. The compositor keeps the session locked; take it
+        # over rather than leave the user at its fallback screen.
+        fallback "the lock screen exited while locked"
+    fi
+    kill -0 "$pid" 2>/dev/null || fallback "the lock screen exited before locking"
+    sleep 0.1
+done
+
+kill "$pid" 2>/dev/null
+wait "$pid" 2>/dev/null
+fallback "the lock screen did not lock within 8s"

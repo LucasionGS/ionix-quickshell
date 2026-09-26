@@ -231,6 +231,36 @@ qs -c ionix ipc call calendar join    # open the next meeting's link
 ```
 
 
+### Lock screen
+
+`ionix-lock` locks the session with `lock.qml`, the second entry point in this tree. It runs as a
+**separate Quickshell process**, so a bar crash or hot-reload can never take the lock with it, but it
+reads the same merged config, so it wears the active theme and restyles live while locked.
+
+- **Background:** by default, whatever awww is showing on each monitor. `lock.background.image` can
+  name a picture or a **directory**, which becomes a slideshow. `lock.background.video` is looped
+  and muted (needs `qt6-multimedia-ffmpeg`, and is skipped on battery unless `videoOnBattery`). Either
+  key may be a per-monitor map:
+  ```json
+  { "lock": { "background": { "video": { "DP-1": "~/Videos/rain.mp4", "*": "" },
+                              "image": "~/Pictures/Wallpapers" } } }
+  ```
+- **Screensaver:** after `lock.screensaver.after` idle seconds the card fades out, the blur clears,
+  stills slowly pan and zoom, and the clock moves to the middle and wanders once a minute. Any key or
+  mouse movement brings the card back, and the key you pressed still counts as typed.
+- **Unlock:** password through PAM, raced against fprintd when a reader is present — the same
+  "either works, never blocks the other" behaviour hyprlock has. Media controls, battery and
+  suspend/restart/shut down (the last two need a second click) are available while locked.
+- **Failure handling:** `ionix-lock` waits for the compositor to confirm every output is covered.
+  If that doesn't happen within 8 s, or the lock screen dies while locked, it hands the session to
+  **hyprlock** instead. A second `ionix-lock` while locked is a no-op.
+
+The PAM stacks live in `ionix/lock/pam/` and are read in place through `PamContext.configDirectory`.
+The password stack is `pam_unix` alone, **not** `include login`, because that stack's `pam_faillock`
+locks you out of your own desktop for ten minutes after three typos.
+
+Hyprland needs `misc.allow_session_lock_restore = true` for the hyprlock takeover to work.
+
 ### Tier 2 — `user.qml` (escape hatch)
 
 If `~/.config/quickshell/ionix/user.qml` exists it is loaded into the shell. Use it to add your own
@@ -273,6 +303,10 @@ qs -c ionix ipc call theme reload
 qs -c ionix ipc call hue toggle              # all lights on/off
 qs -c ionix ipc call hue set 40              # group brightness, percent
 qs -c ionix ipc call hue light 3 true        # one light by bridge id
+
+# the lock screen is its own instance, addressed by path
+qs -p /etc/xdg/quickshell/ionix/lock.qml ipc call lock status
+qs -p /etc/xdg/quickshell/ionix/lock.qml ipc call lock sleep   # straight to the screensaver
 ```
 
 Binding the volume/brightness keys to these instead of `wpctl`/`brightnessctl` gives the OSD exact
@@ -290,6 +324,11 @@ ln -s "$PWD/ionix" ~/.config/quickshell/ionix
 qs -c ionix
 
 make check    # launch for 12s, fail on any logged ERROR/WARN
+
+# the lock screen: run it inside a nested Hyprland, never your own session,
+# unless you are sure you can type your password into it
+Hyprland -c /some/minimal.conf &            # opens as a window; note its wayland-N
+WAYLAND_DISPLAY=wayland-2 IONIX_LOCK_DEV=1 qs -p "$PWD/ionix/lock.qml"
 make lint     # qmlformat — see the warning below
 ```
 

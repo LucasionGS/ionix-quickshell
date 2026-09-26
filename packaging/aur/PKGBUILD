@@ -23,6 +23,8 @@ depends=(
     'bluez-utils'
     'upower'
     'polkit'
+    # ionix-lock: flock for its single-instance guard.
+    'util-linux'
     # ionix-calendar (the calendar sync daemon) and its meeting reminders.
     'python'
     'libnotify'
@@ -37,7 +39,9 @@ optdepends=(
     'blueman: bluetooth manager GUI fallback'
     'nm-connection-editor: advanced network settings from the network popout'
     'hyprland: workspace, window and blur integration'
-    'hyprlock: lock action in the power menu'
+    'hyprlock: fallback when the Quickshell lock screen (ionix-lock) cannot lock'
+    'qt6-multimedia-ffmpeg: video backgrounds on the lock screen'
+    'fprintd: fingerprint unlock on the lock screen'
     'ioexplorer-git: application launcher target for the logo button'
     'toxen-mini: Toxen music player integration'
     'ttf-jetbrains-mono-nerd: the glyph font the bar is designed around'

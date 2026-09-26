@@ -267,8 +267,55 @@ Singleton {
                 // Fraction of the screen the card grid may span before wrapping.
                 maxWidthFraction: 0.8
             },
+            lock: {
+                // The lock screen is its own process (lock.qml, started by
+                // `ionix-lock`), so a bar crash never takes the lock down with it.
+                // It reads this same merged config, so it wears the active theme
+                // and follows it live while locked.
+                background: {
+                    // A picture, a directory of pictures (a slideshow), or "" for
+                    // whatever awww is showing on that monitor. Either key may
+                    // instead be an object keyed by monitor name with "*" as the
+                    // fallback: { "DP-1": "~/Videos/rain.mp4", "*": "" }.
+                    image: "",
+                    // Looped and muted; wins over `image` when set. Needs
+                    // qt6-multimedia-ffmpeg. Anything that fails to play falls back
+                    // to the picture, so a bad path costs nothing but the video.
+                    video: "",
+                    videoOnBattery: false,
+                    // Seconds per picture when `image` is a directory, and how
+                    // often the wallpaper is re-read when `image` is "".
+                    interval: 60,
+                    // 0..1, while the password card is up. The screensaver clears
+                    // both so the picture is seen as it is.
+                    blur: 0.7,
+                    dim: 0.35
+                },
+                screensaver: {
+                    // Seconds without input before the card fades away and only
+                    // the clock stays. 0 keeps the card up for good.
+                    after: 15,
+                    // Slow pan and zoom on still pictures while idle, and a drifting
+                    // clock so nothing sits on the same pixels for hours.
+                    motion: true
+                },
+                // "" → clock.format / "dddd d MMMM".
+                clockFormat: "",
+                dateFormat: "dddd d MMMM",
+                // Now-playing card with transport controls.
+                media: true,
+                // Suspend, restart and shut down buttons. The last two ask for a
+                // second click.
+                power: true,
+                // Race fprintd against the password when a reader is present.
+                // Harmless without one: the first attempt reports no device and
+                // the hint never appears.
+                fingerprint: true
+            },
             power: {
-                lock: ["hyprlock", "-c", "/etc/hypr/hyprlock.conf", "--grace", "2"],
+                // ionix-lock falls back to hyprlock by itself when Quickshell
+                // can't take the lock, so this rarely needs changing.
+                lock: ["ionix-lock"],
                 logout: ["uwsm", "stop"],
                 suspend: ["systemctl", "suspend"],
                 hibernate: ["systemctl", "hibernate"],
@@ -329,6 +376,7 @@ Singleton {
     readonly property var notifications: data.notifications
     readonly property var osd: data.osd
     readonly property var windowSwitcher: data.windowSwitcher
+    readonly property var lock: data.lock
     readonly property var power: data.power
 
     // ── Bar orientation ─────────────────────────────────────────────────────
