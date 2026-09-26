@@ -20,6 +20,7 @@ Singleton {
     readonly property string wifiOff: "󰤫"
     readonly property string disconnected: "󰖪"
     readonly property string lock: "󰌾"
+    readonly property string lockOpen: "󰌿"
     readonly property string logout: "󰍃"
     readonly property string suspend: "󰤄"
     readonly property string hibernate: "󰋊"
@@ -78,6 +79,10 @@ Singleton {
     readonly property string warning: "󰀦"
     readonly property string cancel: "󰜺"
     readonly property string accountCircle: "󰀉"
+    // Lock screen.
+    readonly property string fingerprint: "󰈷"
+    readonly property string capsLock: "󰘲"
+    readonly property string arrowRight: "󰁔"
     readonly property string plus: "󰐕"
     readonly property string powerSaver: "󰌪"
     readonly property string balanced: "󰾅"
