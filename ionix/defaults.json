@@ -115,9 +115,10 @@
   },
 
   "media": {
-    "backend": "auto",
+    "_comment": "backend is mpris or off. preferred is a substring matched against an MPRIS player's identity or D-Bus name to pick one when several are running; empty means whichever is playing.",
+    "backend": "mpris",
     "maxWidth": 180,
-    "preferred": "toxen"
+    "preferred": ""
   },
 
   "clock": {

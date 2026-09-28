@@ -2,15 +2,13 @@ pragma Singleton
 
 // Media facade.
 //
-// Prefers a real MPRIS player (Toxen exposes one, as does anything else you'd
-// play music with). Falls back to polling `toxen-mini` only when MPRIS has
-// nothing AND the binary actually exists — the `which` probe means machines
-// without Toxen never spawn a poll loop, which is the flaw in the waybar script
-// this replaces.
+// Everything comes from MPRIS, so any music player or browser that publishes
+// the standard interface works with no per-player support in the shell. When
+// several are running, `media.preferred` picks one by identity or D-Bus name,
+// otherwise whichever is playing wins and the popout's selector can override.
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Services.Mpris
 import qs.config
 
@@ -18,8 +16,7 @@ Singleton {
     id: root
 
     readonly property string backend: Config.media.backend
-    readonly property bool mprisAllowed: backend === "auto" || backend === "mpris"
-    readonly property bool fallbackAllowed: backend === "auto" || backend === "toxen-mini"
+    readonly property bool enabled: backend !== "off"
 
     // Manual override from the popout's player selector; cleared when it vanishes.
     property MprisPlayer selected: null
@@ -27,7 +24,7 @@ Singleton {
     readonly property var players: Mpris.players.values.filter(p => p.canControl)
 
     readonly property MprisPlayer player: {
-        if (!root.mprisAllowed)
+        if (!root.enabled)
             return null;
         const list = root.players;
         if (list.length === 0)
@@ -44,22 +41,14 @@ Singleton {
         return list.find(p => p.isPlaying) ?? list[0];
     }
 
-    // ── Fallback state ──────────────────────────────────────────────────────
-    property bool fallbackAvailable: false
-    property string fallbackStatus: ""
-    property string fallbackTitle: ""
-    property string fallbackArtist: ""
-
-    readonly property bool usingFallback: !root.player && root.fallbackAllowed && root.fallbackAvailable && root.fallbackStatus !== ""
-
     // ── Unified interface ───────────────────────────────────────────────────
-    readonly property bool active: !!root.player || root.usingFallback
-    readonly property bool playing: root.player ? root.player.isPlaying : root.fallbackStatus === "playing"
-    readonly property string title: root.player ? (root.player.trackTitle ?? "") : root.fallbackTitle
-    readonly property string artist: root.player ? (root.player.trackArtist ?? "") : root.fallbackArtist
+    readonly property bool active: !!root.player
+    readonly property bool playing: root.player?.isPlaying ?? false
+    readonly property string title: root.player?.trackTitle ?? ""
+    readonly property string artist: root.player?.trackArtist ?? ""
     readonly property string album: root.player?.trackAlbum ?? ""
     readonly property string artUrl: root.player?.trackArtUrl ?? ""
-    readonly property string identity: root.player ? (root.player.identity ?? "Player") : "Toxen"
+    readonly property string identity: root.player ? (root.player.identity ?? "Player") : "Player"
 
     readonly property bool canSeek: root.player?.canSeek ?? false
     readonly property real position: root.player?.position ?? 0
@@ -67,24 +56,15 @@ Singleton {
     readonly property bool canSetVolume: root.player?.volumeSupported ?? false
 
     function toggle() {
-        if (root.player)
-            root.player.togglePlaying();
-        else if (root.usingFallback)
-            run(["toxen-mini", "-s", "toggle"]);
+        root.player?.togglePlaying();
     }
 
     function next() {
-        if (root.player)
-            root.player.next();
-        else if (root.usingFallback)
-            run(["toxen-mini", "-s", "next"]);
+        root.player?.next();
     }
 
     function previous() {
-        if (root.player)
-            root.player.previous();
-        else if (root.usingFallback)
-            run(["toxen-mini", "-s", "prev"]);
+        root.player?.previous();
     }
 
     function seek(seconds) {
@@ -104,10 +84,6 @@ Singleton {
     function setVolume(v) {
         if (root.player?.volumeSupported)
             root.player.volume = Math.max(0, Math.min(1, v));
-    }
-
-    function run(cmd) {
-        Quickshell.execDetached(cmd);
     }
 
     function formatTime(seconds) {
@@ -137,60 +113,5 @@ Singleton {
         repeat: true
         triggeredOnStart: true
         onTriggered: root.player?.positionChanged()
-    }
-
-    // ── Fallback plumbing ───────────────────────────────────────────────────
-
-    Component.onCompleted: {
-        if (root.fallbackAllowed)
-            probe.running = true;
-    }
-
-    Process {
-        id: probe
-        command: ["which", "toxen-mini"]
-        onExited: code => root.fallbackAvailable = (code === 0)
-    }
-
-    // Only ticks when MPRIS gave us nothing and toxen-mini exists.
-    Timer {
-        running: root.fallbackAvailable && root.fallbackAllowed && !root.player
-        interval: 2000
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: statusProc.running = true
-    }
-
-    Process {
-        id: statusProc
-        command: ["toxen-mini", "-s", "status"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.fallbackStatus = text.trim();
-                if (root.fallbackStatus !== "") {
-                    titleProc.running = true;
-                    artistProc.running = true;
-                } else {
-                    root.fallbackTitle = "";
-                    root.fallbackArtist = "";
-                }
-            }
-        }
-    }
-
-    Process {
-        id: titleProc
-        command: ["toxen-mini", "-s", "title"]
-        stdout: StdioCollector {
-            onStreamFinished: root.fallbackTitle = text.trim()
-        }
-    }
-
-    Process {
-        id: artistProc
-        command: ["toxen-mini", "-s", "artist"]
-        stdout: StdioCollector {
-            onStreamFinished: root.fallbackArtist = text.trim()
-        }
     }
 }

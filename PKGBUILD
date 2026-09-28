@@ -52,7 +52,6 @@ optdepends=(
     'qt6-multimedia-ffmpeg: video backgrounds on the lock screen'
     'fprintd: fingerprint unlock on the lock screen'
     'ioexplorer-git: application launcher target for the logo button'
-    'toxen-mini: Toxen music player integration'
     'ttf-jetbrains-mono-nerd: the glyph font the bar is designed around'
     'libsecret: keep the calendar sign-in token in the keyring instead of a file'
     'gnome-keyring: a Secret Service for libsecret to store that token in'

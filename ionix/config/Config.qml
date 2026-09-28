@@ -112,10 +112,12 @@ Singleton {
                 iconOverrides: {}
             },
             media: {
-                backend: "auto"          // auto | mpris | toxen-mini | off
-                ,
+                backend: "mpris",        // mpris | off
                 maxWidth: 180,
-                preferred: "toxen"
+                // Substring matched against an MPRIS player's identity or
+                // D-Bus name when several are running; empty = whichever is
+                // playing.
+                preferred: ""
             },
             clock: {
                 format: "HH:mm",
