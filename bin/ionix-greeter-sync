@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""ionix-greeter-sync — leave the login screen a copy of this user's look.
+
+The greeter runs as its own account, which cannot read anyone's home, yet is
+meant to wear the theme and backgrounds of whoever logged in last. So while that
+user is logged in this copies what the lock screen would show into
+$STATE/users/<name>/home, world-readable, laid out like a home directory:
+
+    .config/quickshell/ionix/{config,theme,settings}.json
+    .config/ionix/current-theme
+    .face                       the avatar
+    wallpapers.json             { "<output>": "<picture>" }, from `awww query`
+    media/                      the pictures/videos those and lock.background use
+
+Paths inside the copied JSON that point at the user's own files are rewritten to
+the copies. $STATE/users is sticky and world-writable (tmpfiles.d), so each user
+writes only their own directory and cannot touch another's.
+
+Runs at session start and whenever the wallpaper or theme changes. Does nothing
+where the greeter is not installed (no $STATE/users), so callers need not check.
+
+    ionix-greeter-sync [--quiet]
+"""
+
+import getpass
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+STATE = Path(os.environ.get("IONIX_GREETER_DIR", "/var/lib/ionix-greeter"))
+HOME = Path.home()
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
+QUIET = "--quiet" in sys.argv
+MAX_MEDIA = 256 * 1024 * 1024
+MAX_SLIDES = 40
+PICTURES = {".png", ".jpg", ".jpeg", ".webp", ".avif", ".jxl"}
+
+
+def say(msg):
+    if not QUIET:
+        print(f"ionix-greeter-sync: {msg}", file=sys.stderr)
+
+
+user = getpass.getuser()
+if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user):
+    sys.exit(0)
+users = STATE / "users"
+if not users.is_dir():
+    sys.exit(0)
+
+dest = users / user / "home"
+media = dest / "media"
+media.mkdir(parents=True, exist_ok=True)
+os.chmod(users / user, 0o755)
+os.chmod(dest, 0o755)
+os.chmod(media, 0o755)
+
+copied = {}
+
+
+def take(src: Path) -> str:
+    """Copy one media file into the greeter's tree; returns the new path or ''."""
+    try:
+        src = src.resolve()
+        if not src.is_file() or src.stat().st_size > MAX_MEDIA:
+            return ""
+        if src in copied:
+            return copied[src]
+        # Named by content position, not by path, so two folders holding a
+        # picture of the same name don't collide.
+        out = media / f"{len(copied):03d}-{src.name}"
+        if not out.exists() or out.stat().st_mtime < src.stat().st_mtime or out.stat().st_size != src.stat().st_size:
+            shutil.copyfile(src, out)
+        os.chmod(out, 0o644)
+        copied[src] = str(out)
+        return copied[src]
+    except OSError as e:
+        say(f"{src}: {e}")
+        return ""
+
+
+def expand(p: str) -> Path:
+    return Path(os.path.expanduser(p.strip()))
+
+
+def rewrite_media(value):
+    """A lock.background image/video value: string or {output: string}."""
+    if isinstance(value, str):
+        if not value.strip():
+            return value
+        p = expand(value)
+        if p.is_dir():
+            # A slideshow folder: its first pictures, as a folder of copies.
+            sub = media / f"slides-{len(copied):03d}"
+            sub.mkdir(exist_ok=True)
+            os.chmod(sub, 0o755)
+            n = 0
+            for f in sorted(p.iterdir()):
+                if f.suffix.lower() in PICTURES and n < MAX_SLIDES:
+                    try:
+                        shutil.copyfile(f, sub / f.name)
+                        os.chmod(sub / f.name, 0o644)
+                        n += 1
+                    except OSError:
+                        pass
+            copied[p] = str(sub)
+            return str(sub)
+        return take(p)
+    if isinstance(value, dict):
+        return {k: rewrite_media(v) for k, v in value.items()}
+    return value
+
+
+def copy_json(name: str):
+    src = CONFIG / "quickshell" / "ionix" / name
+    out = dest / ".config" / "quickshell" / "ionix" / name
+    try:
+        data = json.loads(src.read_text())
+    except (OSError, ValueError):
+        out.unlink(missing_ok=True)
+        return
+    bg = (data.get("lock") or {}).get("background") if isinstance(data, dict) else None
+    if isinstance(bg, dict):
+        for key in ("image", "video"):
+            if key in bg:
+                bg[key] = rewrite_media(bg[key])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    os.chmod(tmp, 0o644)
+    tmp.replace(out)
+
+
+for n in ("config.json", "theme.json", "settings.json"):
+    copy_json(n)
+for d in (dest / ".config", dest / ".config" / "quickshell", dest / ".config" / "quickshell" / "ionix", dest / ".config" / "ionix"):
+    d.mkdir(parents=True, exist_ok=True)
+    os.chmod(d, 0o755)
+
+# Which theme is current (theme options are filed under it in settings.json).
+cur = CONFIG / "ionix" / "current-theme"
+if cur.is_file():
+    shutil.copyfile(cur, dest / ".config" / "ionix" / "current-theme")
+    os.chmod(dest / ".config" / "ionix" / "current-theme", 0o644)
+
+# The avatar, by the same search SystemInfo does.
+face = None
+for cand in (CONFIG / "quickshell" / "avatar.png", HOME / ".face"):
+    if cand.is_file():
+        face = cand
+        break
+if face:
+    shutil.copyfile(face, dest / ".face")
+    os.chmod(dest / ".face", 0o644)
+else:
+    (dest / ".face").unlink(missing_ok=True)
+
+# What each monitor is showing now.
+walls = {}
+try:
+    out = subprocess.run(["awww", "query"], capture_output=True, text=True, timeout=5).stdout
+    for line in out.splitlines():
+        m = re.match(r"^:?\s*([^:\s]+):.*currently displaying: image: (.+)$", line)
+        if m:
+            c = take(Path(m.group(2).strip()))
+            if c:
+                walls[m.group(1)] = c
+except (OSError, subprocess.SubprocessError):
+    pass
+if walls:
+    walls["*"] = next(iter(walls.values()))
+    tmp = dest / "wallpapers.json.tmp"
+    tmp.write_text(json.dumps(walls))
+    os.chmod(tmp, 0o644)
+    tmp.replace(dest / "wallpapers.json")
+
+# Drop copies nothing points at any more.
+keep = {Path(v).name for v in copied.values()}
+for f in media.iterdir():
+    if f.name not in keep:
+        shutil.rmtree(f, ignore_errors=True) if f.is_dir() else f.unlink(missing_ok=True)
+
+say(f"synced {user}: {len(copied)} media file(s)")

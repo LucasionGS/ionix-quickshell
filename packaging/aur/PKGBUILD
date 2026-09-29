@@ -42,6 +42,8 @@ optdepends=(
     'hyprlock: fallback when the Quickshell lock screen (ionix-lock) cannot lock'
     'qt6-multimedia-ffmpeg: video backgrounds on the lock screen'
     'fprintd: fingerprint unlock on the lock screen'
+    'greetd: log in through ionix-greeter (the lock screen with a username field)'
+    'cage: the tiny compositor ionix-greeter runs in under greetd'
     'ioexplorer-git: application launcher target for the logo button'
     'ttf-jetbrains-mono-nerd: the glyph font the bar is designed around'
     'libsecret: keep the calendar sign-in token in the keyring instead of a file'

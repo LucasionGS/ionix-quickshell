@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# ionix-greeter — the login screen. greetd runs this inside cage:
+#
+#   [default_session]
+#   command = "cage -s -- ionix-greeter"
+#
+# It is ionix-lock's screen (greeter.qml → the same LockView) with a username
+# field. The theme and backgrounds are the last user's: `ionix-greeter-sync`
+# leaves a copy of them in $STATE/users/<name>/home while that user is logged in,
+# and this points HOME there so Config, Theme and LockMedia read it exactly as
+# they would read the real home. The greeter's own account cannot read /home.
+#
+#   IONIX_GREETER_DIR=…   state dir (default /var/lib/ionix-greeter)
+#   IONIX_GREETER_DRY=1   no greetd: check the password with PAM, launch nothing
+#                         (for trying it: `cage -s -- ionix-greeter` from a session)
+#   IONIX_GREETER_ENTRY=…  run this greeter.qml instead, e.g. a checkout's
+
+set -u
+
+state="${IONIX_GREETER_DIR:-/var/lib/ionix-greeter}"
+export IONIX_GREETER_DIR="$state"
+export IONIX_GREETER=1
+
+entry=""
+# IONIX_GREETER_ENTRY: a greeter.qml to run instead (a checkout, when testing).
+[[ -f "${IONIX_GREETER_ENTRY:-}" ]] && entry="$IONIX_GREETER_ENTRY"
+for dir in "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/ionix" /etc/xdg/quickshell/ionix; do
+    [[ -n "$entry" ]] && break
+    if [[ -f "$dir/greeter.qml" ]]; then
+        entry="$dir/greeter.qml"
+        break
+    fi
+done
+[[ -n "$entry" ]] || { echo "ionix-greeter: no greeter.qml found" >&2; exit 1; }
+
+# Whose look to wear. Only a copy the sync script made counts.
+last=""
+[[ -r "$state/last-user" ]] && last="$(head -n1 "$state/last-user" | tr -d '[:space:]')"
+if [[ "$last" =~ ^[a-z_][a-z0-9_-]*$ && -d "$state/users/$last/home" ]]; then
+    export HOME="$state/users/$last/home"
+    unset XDG_CONFIG_HOME XDG_DATA_HOME
+else
+    # Nobody has logged in yet (first boot): wear the default Ionix theme, which
+    # the styler links into a new account's config at its first login. Without
+    # it the greeter shows the shell's built-in blue defaults, not Ionix.
+    default=/usr/local/share/ionix/styler/themes/ionix/quickshell/theme.json
+    if [[ -f "$default" ]]; then
+        export HOME="${XDG_RUNTIME_DIR:-/tmp}/ionix-greeter/home"
+        mkdir -p "$HOME/.config/quickshell/ionix" "$HOME/.config/ionix"
+        ln -sf "$default" "$HOME/.config/quickshell/ionix/theme.json"
+        echo ionix > "$HOME/.config/ionix/current-theme"
+        unset XDG_CONFIG_HOME XDG_DATA_HOME
+    fi
+fi
+# cage draws no window frames, so Qt would add its own title bar and buttons.
+export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
+# Not somewhere the last user's copy would have to be writable.
+runtime="${XDG_RUNTIME_DIR:-/tmp}"
+export XDG_CACHE_HOME="$runtime/ionix-greeter/cache"
+export XDG_STATE_HOME="$runtime/ionix-greeter/state"
+mkdir -p "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+
+# greetd hands the greeter no useful stdout, so under it the log goes to the
+# journal (`journalctl -t ionix-greeter`), with greetd's own conversation at
+# debug level: it is the only record of why a login did or didn't go through.
+if [[ ! -t 1 && -z "${IONIX_GREETER_DRY:-}" ]] && command -v systemd-cat >/dev/null; then
+    export QT_LOGGING_RULES="quickshell.service.greetd.debug=true${QT_LOGGING_RULES:+;$QT_LOGGING_RULES}"
+    exec > >(exec systemd-cat -t ionix-greeter) 2>&1
+fi
+
+exec qs --no-color -p "$entry"

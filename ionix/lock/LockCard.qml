@@ -254,6 +254,7 @@ Item {
         Column {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: Theme.sp1
+            visible: !LockState.greeter
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -271,6 +272,89 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fsSm
                 color: Theme.muted
+            }
+        }
+
+        // Greeter: who is logging in, as an editable field. Prefilled with the
+        // last user, and left alone (password focused) unless there is none.
+        Rectangle {
+            id: userField
+            visible: LockState.greeter
+            width: parent.width
+            height: 40
+            radius: height / 2
+            color: Theme.alpha(Theme.bgDeep, 0.6)
+            border.width: 1
+            border.color: userInput.activeFocus ? Theme.alpha(Theme.accentBright, 0.7) : Theme.alpha(Theme.border, 0.8)
+
+            Behavior on border.color {
+                ColorAnimation {
+                    duration: Theme.durNormal
+                }
+            }
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.sp5
+                anchors.verticalCenter: parent.verticalCenter
+                text: Icons.account
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsIcon
+                color: userInput.activeFocus ? Theme.accentLight : Theme.muted
+            }
+
+            Text {
+                anchors.centerIn: parent
+                visible: userInput.text === ""
+                text: "Username"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsBase
+                color: Theme.muted
+            }
+
+            TextInput {
+                id: userInput
+                anchors.fill: parent
+                anchors.leftMargin: Theme.sp5 + Theme.fsIcon + Theme.sp3
+                anchors.rightMargin: Theme.sp5 + Theme.fsIcon + Theme.sp3
+                verticalAlignment: TextInput.AlignVCenter
+                horizontalAlignment: TextInput.AlignHCenter
+                clip: true
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsBase
+                color: Theme.textBright
+                selectionColor: Theme.accent
+                selectedTextColor: Theme.textBright
+                inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhPreferLowercase
+                enabled: root.phase !== "checking"
+
+                onTextChanged: {
+                    if (LockState.username !== text)
+                        LockState.username = text;
+                    LockState.clearFailure();
+                }
+                onActiveFocusChanged: LockState.usernameEditing = activeFocus
+
+                // Enter, Tab or Down is "now the password".
+                Keys.onPressed: event => {
+                    LockState.poke();
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Tab || event.key === Qt.Key_Down) {
+                        LockState.usernameEditing = false;
+                        event.accepted = true;
+                    }
+                }
+
+                Connections {
+                    target: LockState
+                    function onUsernameChanged() {
+                        if (userInput.text !== LockState.username)
+                            userInput.text = LockState.username;
+                    }
+                    function onUsernameEditingChanged() {
+                        if (LockState.usernameEditing)
+                            userInput.forceActiveFocus();
+                    }
+                }
             }
         }
 
