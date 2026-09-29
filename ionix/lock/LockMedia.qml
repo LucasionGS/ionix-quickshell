@@ -93,6 +93,34 @@ Singleton {
 
     onCandidateDirsChanged: lister.list()
 
+    // ── The greeter's copy ──────────────────────────────────────────────────
+    //
+    // There is no awww under cage, and no session to ask. What the last user's
+    // wallpaper was is a file `ionix-greeter-sync` wrote at their session:
+    // { "<output>": "<picture>", "*": "<picture>" }, in the HOME that
+    // ionix-greeter pointed at their copy.
+    readonly property bool greeter: Quickshell.env("IONIX_GREETER") === "1"
+
+    FileView {
+        path: root.greeter ? `${Quickshell.env("HOME")}/wallpapers.json` : ""
+        blockLoading: true
+        printErrors: false
+        onLoaded: {
+            try {
+                const map = JSON.parse(this.text());
+                if (map && typeof map === "object")
+                    root.wallpapers = map;
+            } catch (e) {
+                console.warn(`[ionix-greeter] wallpapers.json: ${e}`);
+            }
+        }
+    }
+
+    function ask() {
+        if (!root.greeter)
+            query.running = true;
+    }
+
     // ── awww ────────────────────────────────────────────────────────────────
 
     Process {
@@ -127,7 +155,7 @@ Singleton {
         id: retry
         property int attempts: 0
         interval: 1500
-        onTriggered: query.running = true
+        onTriggered: root.ask()
     }
 
     // ── Slideshow directories ───────────────────────────────────────────────
@@ -179,12 +207,12 @@ Singleton {
         repeat: true
         onTriggered: {
             root.tick++;
-            query.running = true;
+            root.ask();
         }
     }
 
     Component.onCompleted: {
-        query.running = true;
+        root.ask();
         lister.list();
     }
 }

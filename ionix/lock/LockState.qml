@@ -21,6 +21,26 @@ import qs.config
 Singleton {
     id: root
 
+    // ── Greeter mode ────────────────────────────────────────────────────────
+    //
+    // The same screen serves as a login greeter under cage (greeter.qml sets
+    // IONIX_GREETER=1 through bin/ionix-greeter). The differences: there is a
+    // username to type as well as a password, the password is checked by greetd
+    // (GreeterBackend.qml) rather than by our own PamContext, and success starts
+    // a session instead of releasing a lock.
+    //
+    // IONIX_GREETER_DRY=1 is for trying it without greetd: our own PAM stack
+    // checks the password for `username` and nothing is launched.
+    readonly property bool greeter: Quickshell.env("IONIX_GREETER") === "1"
+    readonly property bool greeterDry: Quickshell.env("IONIX_GREETER_DRY") === "1"
+    // The account being logged into. Prefilled from the last login; editing it
+    // is the card's job (LockCard), and `usernameEditing` says the text field
+    // rather than the password buffer is where typing goes.
+    property string username: ""
+    property bool usernameEditing: false
+    // Set by the backend: the greeter is waiting on a login (create_session done).
+    property bool greeterBusy: false
+
     property string buffer: ""
     // idle | checking | failed
     property string phase: "idle"
@@ -31,6 +51,8 @@ Singleton {
     property bool unlocked: false
 
     signal failed
+    // Greeter: the password is ready for greetd (GreeterBackend listens).
+    signal submitted
 
     // ── Screensaver ─────────────────────────────────────────────────────────
     //
@@ -39,11 +61,14 @@ Singleton {
     // check is running or just failed, so the card never fades out from under
     // an error message.
     property bool awake: true
-    readonly property int idleAfter: Math.max(0, Config.lock.screensaver?.after ?? 15)
+    // A login screen that blanks under someone typing their username is worse
+    // than one that stays up.
+    readonly property int idleAfter: root.greeter ? 0 : Math.max(0, Config.lock.screensaver?.after ?? 15)
 
     function poke() {
         root.awake = true;
-        idleTimer.restart();
+        if (root.idleAfter > 0)
+            idleTimer.restart();
     }
 
     Timer {
@@ -82,6 +107,14 @@ Singleton {
         case Qt.Key_Enter:
             root.submit();
             return true;
+        case Qt.Key_Tab:
+        case Qt.Key_Backtab:
+        case Qt.Key_Up:
+            if (root.greeter) {
+                root.usernameEditing = true;
+                return true;
+            }
+            break;
         case Qt.Key_Backspace:
             root.buffer = ctrl ? "" : root.buffer.slice(0, -1);
             return true;
@@ -117,9 +150,16 @@ Singleton {
     function submit() {
         if (root.unlocked || root.phase === "checking" || root.buffer === "")
             return;
+        if (root.greeter && root.username.trim() === "") {
+            root.usernameEditing = true;
+            return;
+        }
         root.phase = "checking";
         root.message = "";
-        password.active = true;
+        if (root.greeter && !root.greeterDry)
+            root.submitted();
+        else
+            password.active = true;
     }
 
     function succeed() {
@@ -152,6 +192,9 @@ Singleton {
         id: password
         configDirectory: root.pamDir
         config: "password"
+        // Only the greeter dry run names someone; everywhere else it is the
+        // session's own user, which is PamContext's default.
+        user: root.greeter && root.greeterDry ? root.username.trim() : ""
 
         // pam_unix asks exactly once. Answering from the change handler rather
         // than feeding the password in up front means nothing holds it beyond
@@ -185,7 +228,9 @@ Singleton {
     // if it prompts, there is one; if it fails without prompting, there isn't (or
     // nothing is enrolled) and it is never started again.
 
-    readonly property bool fingerprintWanted: Config.lock.fingerprint !== false && fprintModule.exists
+    // In the greeter it is greetd's PAM stack that listens (GreeterBackend feeds
+    // the state below), so this context stays off.
+    readonly property bool fingerprintWanted: !root.greeter && Config.lock.fingerprint !== false && fprintModule.exists
     property bool fingerprintAvailable: false
     property bool fingerprintScanning: false
     property string fingerprintMessage: ""
@@ -290,7 +335,8 @@ Singleton {
 
     Component.onCompleted: {
         capsProbe.running = true;
-        idleTimer.restart();
+        if (root.idleAfter > 0)
+            idleTimer.restart();
         root.startFingerprint();
     }
 }

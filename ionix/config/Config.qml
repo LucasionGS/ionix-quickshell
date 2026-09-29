@@ -314,6 +314,11 @@ Singleton {
                 // the hint never appears.
                 fingerprint: true
             },
+            greeter: {
+                // What greetd starts for the user once they have logged in. The
+                // same line the tty1 autologin runs from fish's config.
+                command: ["uwsm", "start", "hyprland-uwsm.desktop"]
+            },
             power: {
                 // ionix-lock falls back to hyprlock by itself when Quickshell
                 // can't take the lock, so this rarely needs changing.
@@ -379,6 +384,7 @@ Singleton {
     readonly property var osd: data.osd
     readonly property var windowSwitcher: data.windowSwitcher
     readonly property var lock: data.lock
+    readonly property var greeter: data.greeter
     readonly property var power: data.power
 
     // ── Bar orientation ─────────────────────────────────────────────────────
