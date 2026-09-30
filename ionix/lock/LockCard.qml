@@ -16,6 +16,10 @@ import qs.services
 Item {
     id: root
 
+    // False on a mirror that must not take focus (see LockView.input): its
+    // username field only shows what the focused one holds.
+    property bool input: true
+
     readonly property string phase: LockState.unlocked ? "success" : LockState.phase
     readonly property color ringColour: {
         if (root.phase === "success")
@@ -285,7 +289,7 @@ Item {
             radius: height / 2
             color: Theme.alpha(Theme.bgDeep, 0.6)
             border.width: 1
-            border.color: userInput.activeFocus ? Theme.alpha(Theme.accentBright, 0.7) : Theme.alpha(Theme.border, 0.8)
+            border.color: LockState.usernameEditing ? Theme.alpha(Theme.accentBright, 0.7) : Theme.alpha(Theme.border, 0.8)
 
             Behavior on border.color {
                 ColorAnimation {
@@ -300,7 +304,7 @@ Item {
                 text: Icons.account
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fsIcon
-                color: userInput.activeFocus ? Theme.accentLight : Theme.muted
+                color: LockState.usernameEditing ? Theme.accentLight : Theme.muted
             }
 
             Text {
@@ -327,13 +331,17 @@ Item {
                 selectedTextColor: Theme.textBright
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhPreferLowercase
                 enabled: root.phase !== "checking"
+                activeFocusOnPress: root.input
 
                 onTextChanged: {
                     if (LockState.username !== text)
                         LockState.username = text;
                     LockState.clearFailure();
                 }
-                onActiveFocusChanged: LockState.usernameEditing = activeFocus
+                onActiveFocusChanged: {
+                    if (root.input)
+                        LockState.usernameEditing = activeFocus;
+                }
 
                 // Enter, Tab or Down is "now the password".
                 Keys.onPressed: event => {
@@ -344,6 +352,12 @@ Item {
                     }
                 }
 
+                // A click on a mirror's field edits the one that has focus.
+                TapHandler {
+                    enabled: !root.input
+                    onTapped: LockState.usernameEditing = true
+                }
+
                 Connections {
                     target: LockState
                     function onUsernameChanged() {
@@ -351,7 +365,7 @@ Item {
                             userInput.text = LockState.username;
                     }
                     function onUsernameEditingChanged() {
-                        if (LockState.usernameEditing)
+                        if (LockState.usernameEditing && root.input)
                             userInput.forceActiveFocus();
                     }
                 }

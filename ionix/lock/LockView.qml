@@ -29,6 +29,10 @@ Item {
 
     // The output this is drawn on; only its name is used, to pick a wallpaper.
     property var screen: null
+    // Whether this view takes the keyboard. Every lock surface is its own
+    // window and can; the greeter draws one view per monitor inside a single
+    // window, where only one item can hold focus, so only one of them may try.
+    property bool input: true
 
     readonly property bool awake: LockState.awake && !LockState.unlocked
     readonly property bool leaving: LockState.unlocked
@@ -57,7 +61,7 @@ Item {
     Item {
         id: content
         anchors.fill: parent
-        focus: true
+        focus: surface.input
         opacity: surface.entered && !surface.leaving ? 1 : 0
 
         Behavior on opacity {
@@ -75,7 +79,7 @@ Item {
         Connections {
             target: LockState
             function onUsernameEditingChanged() {
-                if (!LockState.usernameEditing)
+                if (!LockState.usernameEditing && surface.input)
                     content.forceActiveFocus();
             }
         }
@@ -241,6 +245,7 @@ Item {
         // ── Card ────────────────────────────────────────────────────────────
         LockCard {
             id: card
+            input: surface.input
             width: Math.min(380, content.width - Theme.sp7 * 2)
             height: implicitHeight
             x: (content.width - width) / 2
