@@ -2,12 +2,20 @@ pragma Singleton
 
 // Philips Hue bridge client — discovery, pairing, light state and control.
 //
-// Speaks the CLIP **v1** API over plain HTTP. v2 is HTTPS-only behind a
-// self-signed certificate that QML's XMLHttpRequest cannot be told to accept, so
-// v2 would mean shelling out to `curl -k` for every call and taking a dependency
-// the shell doesn't otherwise need. v1 costs nothing, covers on/off, brightness,
-// hue/saturation and colour temperature, and gives "all lights" for free as the
-// implicit group 0. What it doesn't give is a push event stream, hence polling.
+// Speaks the CLIP **v1** API, over HTTPS through `curl`. v1 covers on/off,
+// brightness, hue/saturation and colour temperature, and gives "all lights" for
+// free as the implicit group 0. What it doesn't give is a push event stream,
+// hence polling.
+//
+// HTTPS is not optional: the Bridge Pro (BSB003) answers every plain-HTTP request
+// with a 301 to https://, and the bridge's certificate is signed by Signify's own
+// "root-bridge" CA, which no system trust store carries. QML's XMLHttpRequest
+// cannot be told to accept that, so it followed the redirect, failed the TLS
+// handshake and reported status 0 — "Could not reach the bridge", with the
+// bridge sitting right there. Every bridge on current firmware serves v1 over
+// HTTPS, so the classic bridge goes the same way, and its credential stops
+// crossing the LAN in clear text. See bridgeRequest() for how the token is kept
+// out of `ps`.
 //
 // Polling only runs while something is looking: HuePopout sets `tracking` while
 // it is open, and the timer is gated on it. With the panel closed this service
@@ -21,6 +29,7 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.config
 
 Singleton {
@@ -224,7 +233,7 @@ Singleton {
         // devicetype is "appname#devicename" and the bridge caps it at 40 chars,
         // so the whole thing is trimmed rather than letting the bridge reject it.
         const host = (SystemInfo.host && SystemInfo.host !== "") ? SystemInfo.host : "ionix";
-        root.request("POST", `http://${root.pairIp}/api`, {
+        root.bridgeRequest("POST", `https://${root.pairIp}/api`, {
             devicetype: `ionix#${host}`.substring(0, 40)
         }, parsed => {
             const entry = (Array.isArray(parsed) ? parsed : []).find(e => e && e.success);
@@ -283,13 +292,13 @@ Singleton {
 
     // ── Polling ─────────────────────────────────────────────────────────────
 
-    readonly property string apiBase: `http://${HueState.bridgeIp}/api/${HueState.username}`
+    readonly property string apiBase: `https://${HueState.bridgeIp}/api/${HueState.username}`
 
     function refresh() {
         if (!HueState.paired || root.fetching)
             return;
         root.fetching = true;
-        root.request("GET", `${root.apiBase}/lights`, null, parsed => {
+        root.bridgeRequest("GET", `${root.apiBase}/lights`, null, parsed => {
             root.fetching = false;
             if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
                 root.lastError = "Bridge returned an unexpected light list";
@@ -533,7 +542,7 @@ Singleton {
         const body = Object.assign({}, patch);
         // transitiontime is in 100ms units.
         body.transitiontime = Math.max(0, Math.round((Config.hue.transitionTime ?? 300) / 100));
-        root.request("PUT", url, body, () => {
+        root.bridgeRequest("PUT", url, body, () => {
             confirm.restart();
         }, (msg, err) => {
             if (err && err.type === 1) {
@@ -558,37 +567,16 @@ Singleton {
 
     // onFail is called as (message, error) where `error` is the v1 error object
     // when the bridge sent one, and undefined for transport failures.
+    //
+    // XMLHttpRequest, for discovery.meethue.com only — it has a real certificate.
+    // Anything addressed to the bridge itself goes through bridgeRequest().
     function request(method, url, body, onOk, onFail) {
         const xhr = new XMLHttpRequest();
 
         xhr.onreadystatechange = () => {
             if (xhr.readyState !== XMLHttpRequest.DONE)
                 return;
-
-            // status 0 is the shape a refused connection or a bad address takes.
-            if (xhr.status === 0) {
-                onFail("Could not reach the bridge");
-                return;
-            }
-            if (xhr.status < 200 || xhr.status >= 300) {
-                onFail(`Bridge returned HTTP ${xhr.status}`);
-                return;
-            }
-
-            let parsed;
-            try {
-                parsed = JSON.parse(xhr.responseText);
-            } catch (e) {
-                onFail("Bridge sent a response that isn't JSON");
-                return;
-            }
-
-            const err = root.firstError(parsed);
-            if (err) {
-                onFail(root.errorText(err), err);
-                return;
-            }
-            onOk(parsed);
+            root.handle(xhr.status, xhr.responseText, onOk, onFail);
         };
 
         xhr.open(method, url);
@@ -598,6 +586,108 @@ Singleton {
         } else {
             xhr.send();
         }
+    }
+
+    // Same contract as request(), through curl, so the bridge's certificate can
+    // be accepted. That is `insecure`: there is no CA to check it against, so a
+    // machine on the LAN impersonating the bridge would get the credential. The
+    // plain HTTP this replaced was readable by anyone on the LAN.
+    //
+    // The URL carries the credential, so it never goes on curl's command line,
+    // where every account on the machine can read it in /proc/<pid>/cmdline.
+    // The whole request is a curl config read from stdin (`-K -`), handed over
+    // through the environment, which /proc only shows to our own uid.
+    function bridgeRequest(method, url, body, onOk, onFail) {
+        const quote = s => `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
+        const lines = ["silent", "show-error", "insecure", "connect-timeout = 4", "max-time = 8", `request = ${quote(method)}`,
+            // The status goes on a line of its own after the body.
+            `write-out = "\\n%{http_code}"`, `url = ${quote(url)}`];
+        if (body !== null && body !== undefined) {
+            lines.push(`header = "Content-Type: application/json"`);
+            lines.push(`data-binary = ${quote(JSON.stringify(body))}`);
+        }
+        curl.createObject(root, {
+            config: lines.join("\n") + "\n",
+            okCallback: onOk,
+            failCallback: onFail
+        });
+    }
+
+    Component {
+        id: curl
+
+        Process {
+            id: call
+
+            property string config: ""
+            property var okCallback
+            property var failCallback
+            // Whichever of these lands second destroys the object; destroying it
+            // after `exited` alone could drop output the collector hasn't
+            // delivered yet.
+            property bool collected: false
+            property bool hasExited: false
+
+            command: ["sh", "-c", `printf '%s' "$IONIX_HUE_REQUEST" | exec curl -K -`]
+            environment: ({
+                    IONIX_HUE_REQUEST: call.config
+                })
+            running: true
+
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    const text = this.text;
+                    const cut = text.lastIndexOf("\n");
+                    // curl writes 000 when it never got a response (refused,
+                    // timed out, TLS failed) — the same case XHR reports as 0.
+                    const status = parseInt(cut === -1 ? text : text.substring(cut + 1)) || 0;
+                    root.handle(status, cut === -1 ? "" : text.substring(0, cut), call.okCallback, call.failCallback);
+                    call.collected = true;
+                    if (call.hasExited)
+                        call.destroy();
+                }
+            }
+
+            stderr: StdioCollector {
+                onStreamFinished: {
+                    if (this.text.trim() !== "")
+                        console.warn(`[ionix] hue: ${this.text.trim()}`);
+                }
+            }
+
+            onExited: {
+                call.hasExited = true;
+                if (call.collected)
+                    call.destroy();
+            }
+        }
+    }
+
+    function handle(status, text, onOk, onFail) {
+        // status 0 is the shape a refused connection or a bad address takes.
+        if (status === 0) {
+            onFail("Could not reach the bridge");
+            return;
+        }
+        if (status < 200 || status >= 300) {
+            onFail(`Bridge returned HTTP ${status}`);
+            return;
+        }
+
+        let parsed;
+        try {
+            parsed = JSON.parse(text);
+        } catch (e) {
+            onFail("Bridge sent a response that isn't JSON");
+            return;
+        }
+
+        const err = root.firstError(parsed);
+        if (err) {
+            onFail(root.errorText(err), err);
+            return;
+        }
+        onOk(parsed);
     }
 
     function firstError(parsed) {
