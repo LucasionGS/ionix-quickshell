@@ -30,6 +30,8 @@ depends=(
     'libnotify'
     # The clock's countdown timer rings with its alarm-clock-elapsed sound.
     'sound-theme-freedesktop'
+    # Hue: the bridge speaks HTTPS only, behind a cert XMLHttpRequest rejects.
+    'curl'
 )
 makedepends=('git')
 optdepends=(
