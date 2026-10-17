@@ -89,7 +89,7 @@ Singleton {
                 // are desktop-entry ids without the ".desktop" suffix, the same form
                 // a window's app_id resolves to. Ids that match nothing installed are
                 // skipped rather than drawn empty, so listing extras is harmless.
-                defaultPins: ["io.github.ionix.IoExplorer", "kitty", "firefox", "code", "tabby", "steam"],
+                defaultPins: ["io.github.ionix.IoExplorer", "ionterm", "firefox", "code", "tabby", "steam"],
                 // Where ionixtheme keeps its themes. Only read to pull each theme's
                 // colours for the picker swatches.
                 stylerDir: "/usr/local/share/ionix/styler",

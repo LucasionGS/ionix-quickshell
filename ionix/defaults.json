@@ -94,7 +94,7 @@
     "recommendCount": 8,
     "displayName": "",
     "avatar": "",
-    "defaultPins": ["io.github.ionix.IoExplorer", "kitty", "firefox", "code", "tabby", "steam"],
+    "defaultPins": ["io.github.ionix.IoExplorer", "ionterm", "firefox", "code", "tabby", "steam"],
     "stylerDir": "/usr/local/share/ionix/styler",
     "stylerBin": "/usr/local/share/ionix/styler/bin/ionixtheme",
     "stateFile": ""
