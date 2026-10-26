@@ -98,6 +98,12 @@ Singleton {
     readonly property string wsEmpty: "󰝦"
     readonly property string wsUrgent: "󰀦"
 
+    // Project workspaces (services/Projects.qml).
+    readonly property string project: "󰉋"
+    readonly property string save: "󰆓"
+    readonly property string rename: "󰏫"
+    readonly property string trash: "󰆴"
+
     // ── Volume ──────────────────────────────────────────────────────────────
     readonly property var volumeRamp: ["󰕿", "󰖀", "󰕾"]
 

@@ -298,6 +298,37 @@ ShellRoot {
         }
     }
 
+    // Project workspaces (services/Projects.qml). The CLI calls refresh after
+    // every save, rename and delete; open and saveDialog are for the binds and
+    // land the start menu on its Projects page.
+    IpcHandler {
+        target: "projects"
+
+        function refresh(): void {
+            Projects.refresh();
+        }
+        function open(): void {
+            Popouts.startView = "projects";
+            Popouts.open("start", null);
+        }
+        function saveDialog(): void {
+            Popouts.startView = "projects-save";
+            Popouts.open("start", null);
+        }
+        function load(name: string): void {
+            Projects.focusOrLoad(name);
+        }
+        function save(name: string): void {
+            Projects.save(name);
+        }
+        function list(): string {
+            return Projects.list.map(p => p.name).join("\n");
+        }
+        function current(): string {
+            return Projects.current;
+        }
+    }
+
     IpcHandler {
         target: "theme"
 

@@ -27,6 +27,10 @@ Replaces waybar in [Ionix](https://github.com/LucasionGS/ionix-iso).
   on/off, brightness, colour and colour temperature, plus the same for all lights at once.
   Pin the ones you actually use; the panel opens on them.
 - **OSD** — volume and brightness, driven over IPC so the feedback is exact rather than polled.
+- **Project workspaces** — with the Ionix `ionix-project` CLI installed, a workspace's apps and
+  layout can be saved under a name and opened again later on a free workspace. The name labels
+  the workspace in the bar and on the Alt+Tab cards, and the start menu gets a Projects page
+  (save, open, rename, delete) and search results. Without the CLI the feature stays hidden.
 
 ## Install
 
@@ -303,6 +307,10 @@ qs -c ionix ipc call theme reload
 qs -c ionix ipc call hue toggle              # all lights on/off
 qs -c ionix ipc call hue set 40              # group brightness, percent
 qs -c ionix ipc call hue light 3 true        # one light by bridge id
+qs -c ionix ipc call projects open           # start menu on its Projects page
+qs -c ionix ipc call projects saveDialog     # …with the cursor in the save field
+qs -c ionix ipc call projects load "Ionix"   # go to it if open, else open it
+qs -c ionix ipc call projects current        # the focused workspace's label
 
 # the lock screen is its own instance, addressed by path
 qs -p /etc/xdg/quickshell/ionix/lock.qml ipc call lock status

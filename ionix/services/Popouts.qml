@@ -19,6 +19,10 @@ Singleton {
     // leave monitor A's panel showing. Null means "wherever focus is" — that's
     // what IPC calls produce, since a command line has no screen to point at.
     property var screen: null
+    // The start menu page to land on the next time it opens or is already open
+    // ("projects", or "projects-save" to put the cursor in the save field).
+    // The menu clears it once read, so an ordinary open is still home.
+    property string startView: ""
 
     function isOpen(name, forScreen) {
         if (root.current !== name)
