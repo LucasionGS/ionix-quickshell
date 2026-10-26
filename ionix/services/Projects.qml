@@ -202,6 +202,27 @@ Singleton {
         root.reloadApps();
     }
 
+    // A labeled workspace whose last window closes (or moves away) loses its
+    // label right then. Hyprland keeps the workspace you are on alive while it
+    // is empty, so otherwise the label stayed until you left it, still saying
+    // the project was open. Only a drop *to* no windows counts: a load labels
+    // its workspace before any app has a window, and `ionix-project label` may
+    // label an empty one on purpose. An empty workspace no monitor is showing
+    // is destroyed by Hyprland, label and all, so it is left alone.
+    Instantiator {
+        model: root.available ? Hyprland.workspaces : null
+
+        delegate: QtObject {
+            required property HyprlandWorkspace modelData
+            readonly property int windows: modelData.toplevels.values.length
+
+            onWindowsChanged: {
+                if (windows === 0 && modelData.active && root.labelFor(modelData) !== "")
+                    Compositor.renameWorkspace(modelData.id, String(modelData.id));
+            }
+        }
+    }
+
     // Wrapped in sh for the same reason Themes is: a missing CLI is a clean
     // "not installed" instead of a failed-to-start process on every launch.
     Process {
