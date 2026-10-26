@@ -37,6 +37,9 @@ Item {
     // Through the service, not toplevel.urgent — see WindowSwitcher's urgency
     // tracking for why the property alone cannot be trusted.
     readonly property bool urgent: WindowSwitcher.isUrgent(root.toplevel)
+    // The label of the window's workspace when it is a project workspace
+    // (services/Projects.qml); a rename shows up live.
+    readonly property string project: Config.windowSwitcher.showProjectLabels ? Projects.labelForToplevel(root.toplevel) : ""
 
     // Surround glow on an urgent card — the border alone reads like a hover
     // state at a glance; a halo singles the card out across a full grid.
@@ -135,6 +138,47 @@ Item {
                     font.weight: Font.Bold
                     color: Theme.accentLight
                 }
+            }
+        }
+    }
+
+    // Project chip, over the thumbnail's top-left corner rather than in the
+    // footer, so the window title keeps the footer's whole width. Declared
+    // after the thumbnail so it paints above it.
+    Rectangle {
+        anchors.top: thumbBox.top
+        anchors.left: thumbBox.left
+        visible: root.project !== ""
+        width: chipRow.implicitWidth + Theme.sp2 * 2
+        height: 20
+        radius: Theme.rRound
+        color: Theme.alpha(Theme.bgDeep, 0.8)
+        border.width: 1
+        border.color: Theme.alpha(Theme.accentBright, 0.45)
+
+        Row {
+            id: chipRow
+            anchors.centerIn: parent
+            spacing: Theme.sp1
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: Icons.project
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsXs
+                color: Theme.accentLight
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                // Never wider than the thumbnail it sits on.
+                width: Math.min(implicitWidth, thumbBox.width - Theme.sp2 * 2 - Theme.fsXs - Theme.sp1 * 2)
+                text: root.project
+                elide: Text.ElideRight
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsXs
+                font.weight: Font.DemiBold
+                color: Theme.textBright
             }
         }
     }

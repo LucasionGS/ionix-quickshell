@@ -100,7 +100,20 @@ Singleton {
                 // 0 = show only the workspaces this monitor actually owns. Raise it
                 // only if you have per-monitor workspace rules; see Workspaces.qml.
                 persistent: 0,
-                showEmpty: true
+                showEmpty: true,
+                // A workspace saved or loaded as a project carries its label;
+                // horizontal bars print it beside the dot, cut at labelMaxWidth
+                // pixels. Vertical bars keep the dot and put it in the tooltip.
+                showLabels: true,
+                labelMaxWidth: 120
+            },
+            projects: {
+                // Project workspaces: `ionix-project`, which ships with Ionix.
+                // Without it on PATH the feature hides itself whatever this says.
+                enabled: true,
+                bin: "ionix-project",
+                // The Projects section on the start menu's home page.
+                showInStart: true
             },
             taskbar: {
                 enabled: true,
@@ -267,7 +280,10 @@ Singleton {
                 cardWidth: 240,
                 cardHeight: 170,
                 // Fraction of the screen the card grid may span before wrapping.
-                maxWidthFraction: 0.8
+                maxWidthFraction: 0.8,
+                // Chip over a card whose window sits on a labeled (project)
+                // workspace.
+                showProjectLabels: true
             },
             lock: {
                 // The lock screen is its own process (lock.qml, started by
@@ -370,6 +386,7 @@ Singleton {
     readonly property var launcher: data.launcher
     readonly property var start: data.start
     readonly property var workspaces: data.workspaces
+    readonly property var projects: data.projects
     readonly property var taskbar: data.taskbar
     readonly property var media: data.media
     readonly property var clock: data.clock

@@ -1,4 +1,8 @@
 // Workspace dots for this monitor, with one accent blob sliding to the active one.
+//
+// A project workspace (services/Projects.qml) also prints its label beside the
+// dot on a horizontal bar. The label only widens the dot, so the blob, which
+// reads each dot's width, slides and stretches over it with no extra wiring.
 
 import QtQuick
 import Quickshell
@@ -140,11 +144,24 @@ Item {
 
                         readonly property bool isActive: modelData.active
                         readonly property bool hovered: dotMouse.containsMouse
+                        readonly property string project: Projects.labelFor(modelData.workspace)
+                        // Sideways text on a vertical bar would be unreadable at
+                        // this size; there the label lives in the tooltip only.
+                        readonly property bool showsLabel: dot.project !== "" && Config.workspaces.showLabels && !root.vertical
+                        readonly property color tint: {
+                            if (dot.modelData.urgent)
+                                return Theme.orange;
+                            if (dot.isActive)
+                                return Theme.textBright;
+                            if (dot.hovered)
+                                return Theme.accentLight;
+                            return dot.modelData.occupied ? Theme.text : Theme.border;
+                        }
 
                         // The dot grows along the bar's long axis; the other axis
                         // is the lane. 34/26/20 read as active / has windows /
                         // empty without needing a second cue.
-                        readonly property int span: isActive ? 34 : (modelData.occupied ? 26 : 20)
+                        readonly property int span: dot.showsLabel ? dotContent.implicitWidth + Theme.sp4 : (isActive ? 34 : (modelData.occupied ? 26 : 20))
 
                         width: root.vertical ? root.lane : span
                         height: root.vertical ? span : root.lane
@@ -162,51 +179,67 @@ Item {
                             }
                         }
 
-                        Text {
+                        Row {
+                            id: dotContent
                             anchors.centerIn: parent
-                            text: {
-                                if (dot.modelData.urgent)
-                                    return Icons.wsUrgent;
-                                if (dot.isActive)
-                                    return Icons.wsActive;
-                                return dot.modelData.occupied ? Icons.wsOccupied : Icons.wsEmpty;
-                            }
-                            font.family: Theme.fontFamily
-                            font.pixelSize: dot.isActive ? Theme.fsMd : Theme.fsSm
-                            color: {
-                                if (dot.modelData.urgent)
-                                    return Theme.orange;
-                                if (dot.isActive)
-                                    return Theme.textBright;
-                                if (dot.hovered)
-                                    return Theme.accentLight;
-                                return dot.modelData.occupied ? Theme.text : Theme.border;
-                            }
-                            scale: dot.isActive ? 1.15 : 1.0
+                            spacing: Theme.sp1
 
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: Theme.durNormal
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: {
+                                    if (dot.modelData.urgent)
+                                        return Icons.wsUrgent;
+                                    if (dot.isActive)
+                                        return Icons.wsActive;
+                                    return dot.modelData.occupied ? Icons.wsOccupied : Icons.wsEmpty;
                                 }
-                            }
-                            Behavior on scale {
-                                NumberAnimation {
-                                    duration: Theme.durNormal
-                                    easing.type: Theme.easeOvershoot
+                                font.family: Theme.fontFamily
+                                font.pixelSize: dot.isActive ? Theme.fsMd : Theme.fsSm
+                                color: dot.tint
+                                scale: dot.isActive ? 1.15 : 1.0
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Theme.durNormal
+                                    }
+                                }
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: Theme.durNormal
+                                        easing.type: Theme.easeOvershoot
+                                    }
+                                }
+
+                                SequentialAnimation on opacity {
+                                    running: dot.modelData.urgent
+                                    loops: Animation.Infinite
+                                    alwaysRunToEnd: true
+                                    NumberAnimation {
+                                        to: 0.4
+                                        duration: 600
+                                    }
+                                    NumberAnimation {
+                                        to: 1.0
+                                        duration: 600
+                                    }
                                 }
                             }
 
-                            SequentialAnimation on opacity {
-                                running: dot.modelData.urgent
-                                loops: Animation.Infinite
-                                alwaysRunToEnd: true
-                                NumberAnimation {
-                                    to: 0.4
-                                    duration: 600
-                                }
-                                NumberAnimation {
-                                    to: 1.0
-                                    duration: 600
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: dot.showsLabel
+                                width: visible ? Math.min(implicitWidth, Config.workspaces.labelMaxWidth) : 0
+                                text: dot.project
+                                elide: Text.ElideRight
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fsSm
+                                font.weight: dot.isActive ? Font.DemiBold : Font.Normal
+                                color: dot.tint
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Theme.durNormal
+                                    }
                                 }
                             }
                         }
@@ -231,12 +264,13 @@ Item {
                             shown: dot.hovered
                             text: {
                                 const ws = dot.modelData.workspace;
+                                const name = dot.project === "" ? `Workspace ${dot.modelData.id}` : `Workspace ${dot.modelData.id} · ${dot.project}`;
                                 if (!ws)
-                                    return `Workspace ${dot.modelData.id} — empty`;
+                                    return `${name} — empty`;
                                 const titles = ws.toplevels.values.map(t => t.title).filter(t => !!t);
                                 if (titles.length === 0)
-                                    return `Workspace ${dot.modelData.id} — empty`;
-                                return `Workspace ${dot.modelData.id}\n` + titles.slice(0, 8).join("\n");
+                                    return `${name} — empty`;
+                                return `${name}\n` + titles.slice(0, 8).join("\n");
                             }
                         }
                     }

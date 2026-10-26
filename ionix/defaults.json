@@ -103,7 +103,16 @@
   "workspaces": {
     "_comment": "Workspaces are filtered to the monitor the bar is on. persistent pads the list with empty slots and is 0 by default because Hyprland assigns workspace IDs dynamically across monitors; raise it only with per-monitor workspace rules.",
     "persistent": 0,
-    "showEmpty": true
+    "showEmpty": true,
+    "showLabels": true,
+    "labelMaxWidth": 120
+  },
+
+  "projects": {
+    "_comment": "Project workspaces: save a workspace's apps and layout under a label and open them again later, with `ionix-project` (ships with Ionix; without it on PATH the feature hides itself). The label is the workspace's Hyprland name, so the bar shows it beside the dot (workspaces.showLabels) and the Alt+Tab cards carry it (windowSwitcher.showProjectLabels). showInStart adds the Projects section to the start menu's home page. Projects are JSON files in $XDG_CONFIG_HOME/ionix/projects, one per project, safe to edit by hand.",
+    "enabled": true,
+    "bin": "ionix-project",
+    "showInStart": true
   },
 
   "taskbar": {
@@ -215,7 +224,8 @@
     "livePreviews": true,
     "cardWidth": 240,
     "cardHeight": 170,
-    "maxWidthFraction": 0.8
+    "maxWidthFraction": 0.8,
+    "showProjectLabels": true
   },
 
   "lock": {

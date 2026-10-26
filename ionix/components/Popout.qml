@@ -147,9 +147,13 @@ PopupWindow {
         }
     }
 
+    // Set while something inside wants Escape for itself (an edit field it
+    // cancels): a Shortcut fires before the focused item ever sees the key.
+    property bool holdEscape: false
+
     Shortcut {
         sequence: "Escape"
-        enabled: root.shouldOpen
+        enabled: root.shouldOpen && !root.holdEscape
         onActivated: Popouts.close()
     }
 }

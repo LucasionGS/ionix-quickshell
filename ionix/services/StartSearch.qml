@@ -5,7 +5,7 @@ pragma Singleton
 // Every provider returns rows in the same shape, so the menu renders one list and
 // the keyboard walks it without caring what a row is:
 //
-//   kind      app | window | action | theme, used for the section header
+//   kind      app | window | project | action | theme, for the section header
 //   key       stable identity, for delegate reuse and selection
 //   title     the label
 //   subtitle  the dim second line, may be ""
@@ -29,6 +29,7 @@ Singleton {
 
     readonly property real appWeight: 1.0
     readonly property real windowWeight: 0.96
+    readonly property real projectWeight: 0.94
     readonly property real actionWeight: 0.92
     readonly property real themeWeight: 0.88
 
@@ -40,7 +41,7 @@ Singleton {
         if (q === "")
             return [];
 
-        const rows = root.apps(q).concat(root.windows(q), root.actions(q), root.themes(q));
+        const rows = root.apps(q).concat(root.windows(q), root.projects(q), root.actions(q), root.themes(q));
         return rows.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title)).slice(0, root.totalLimit);
     }
 
@@ -121,6 +122,36 @@ Singleton {
         return root.cap(rows);
     }
 
+    // ── Projects ────────────────────────────────────────────────────────────
+    //
+    // Saved project workspaces. Like the window rows, an open one is a jump
+    // rather than a second copy; "project" alone lists them all.
+
+    function projects(q) {
+        if (!Projects.available)
+            return [];
+
+        const rows = [];
+        for (const project of Projects.list) {
+            const score = Math.max(Apps.matchScore(project.name, q), Apps.matchScore("project", q) * 0.8);
+            if (score <= 0)
+                continue;
+            const open = Projects.workspaceFor(project.name);
+            const count = project.windows === 1 ? "1 window" : `${project.windows} windows`;
+            rows.push({
+                kind: "project",
+                key: `project:${project.slug}`,
+                title: project.name,
+                subtitle: open ? `Open on workspace ${open.id}  ·  ${count}` : `Project  ·  ${count}`,
+                icon: "",
+                glyph: Icons.project,
+                score: score * root.projectWeight,
+                activate: () => Projects.focusOrLoad(project.name)
+            });
+        }
+        return root.cap(rows);
+    }
+
     // ── Shell and session actions ───────────────────────────────────────────
 
     // Built fresh each call so the subtitles reflect current state ("On"/"Off" for
@@ -184,6 +215,18 @@ Singleton {
                 keywords: ["join", "meeting", "teams", "call"],
                 hidden: !Calendar.ready || !Calendar.nextEvent || Calendar.nextEvent.joinUrl === "",
                 run: () => Calendar.join(Calendar.nextEvent)
+            },
+            {
+                title: "Save workspace as project",
+                subtitle: Projects.current === "" ? "Keep this workspace's apps and layout under a name" : `Update “${Projects.current}” with what is open now`,
+                glyph: Icons.save,
+                keywords: ["project", "save", "workspace", "layout", "session"],
+                hidden: !Projects.available,
+                // Reopens the menu on the save field: run() has just closed it.
+                run: () => {
+                    Popouts.startView = "projects-save";
+                    Popouts.open("start", null);
+                }
             },
             {
                 title: "Reload theme",
@@ -297,6 +340,8 @@ Singleton {
             return "Applications";
         if (kind === "window")
             return "Open windows";
+        if (kind === "project")
+            return "Projects";
         if (kind === "action")
             return "Actions";
         if (kind === "theme")

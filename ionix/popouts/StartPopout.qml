@@ -26,11 +26,13 @@ Popout {
 
     panelWidth: Config.start.width
     padding: Theme.sp5
+    // A project being renamed takes Escape to cancel the edit.
+    holdEscape: root.renaming !== ""
 
     // ── State ───────────────────────────────────────────────────────────────
 
     property string query: ""
-    // home | all | settings — which face the body shows when nothing is typed. A
+    // home | all | settings | projects — which face the body shows when nothing is typed. A
     // non-empty query always wins, so `mode` rather than `view` is what the body
     // switches on.
     property string view: "home"
@@ -41,6 +43,12 @@ Popout {
     property bool themesOpen: false
     property string armed: ""
     property bool menuOpen: false
+    // Projects page state: the project whose row is an edit field, the one whose
+    // Delete has been clicked once, and whether the save field takes the cursor
+    // when the page opens (the save bind and search action ask for that).
+    property string renaming: ""
+    property string deleteArmed: ""
+    property bool saveFocus: false
 
     readonly property bool searching: root.query.trim() !== ""
     readonly property string mode: root.searching ? "results" : root.view
@@ -54,7 +62,7 @@ Popout {
     // holding the best match leads and the rest keep their canonical order —
     // otherwise typing a window title would bury it under an Applications header.
     readonly property var resultRows: {
-        const order = ["app", "window", "action", "theme"];
+        const order = ["app", "window", "project", "action", "theme"];
         if (root.results.length > 0) {
             const lead = root.results[0].kind;
             order.splice(order.indexOf(lead), 1);
@@ -90,6 +98,16 @@ Popout {
         const count = Config.start.recommendCount;
         const ids = root.recommendMode === "recent" ? StartState.recent(count) : StartState.frequent(count);
         return ids.map(id => Apps.byId(id)).filter(entry => !!entry);
+    }
+
+    // Saved projects for the home page: the open ones first — those are the
+    // ones a click jumps to — then the rest, a handful at most. The Projects
+    // page lists them all.
+    readonly property bool showProjects: Projects.available && Config.projects.showInStart && Projects.list.length > 0
+    readonly property var homeProjects: {
+        const open = Projects.list.filter(p => Projects.workspaceFor(p.name) !== null);
+        const closed = Projects.list.filter(p => Projects.workspaceFor(p.name) === null);
+        return open.concat(closed).slice(0, 4);
     }
 
     readonly property var filteredApps: root.category === "" ? Apps.list : Apps.list.filter(entry => Apps.inCategory(entry, root.category))
@@ -310,6 +328,33 @@ Popout {
                     subtitle: "Off means every window, most recent first"
                 }
             ]
+        },
+        {
+            title: "Projects",
+            rows: [
+                {
+                    section: "projects",
+                    key: "showInStart",
+                    glyph: Icons.project,
+                    title: "Projects in Start",
+                    subtitle: "Saved project workspaces on the home page"
+                },
+                {
+                    section: "workspaces",
+                    key: "showLabels",
+                    module: "Workspaces",
+                    glyph: Icons.wsActive,
+                    title: "Project labels in the bar",
+                    subtitle: "A project workspace's name beside its dot"
+                },
+                {
+                    section: "windowSwitcher",
+                    key: "showProjectLabels",
+                    glyph: Icons.window,
+                    title: "Project labels in Alt-Tab",
+                    subtitle: "Mark windows that belong to a project"
+                }
+            ]
         }
     ]
 
@@ -340,14 +385,49 @@ Popout {
         root.themesOpen = false;
         root.armed = "";
         root.menuOpen = false;
+        root.renaming = "";
+        root.deleteArmed = "";
+        root.saveFocus = false;
         searchInput.text = "";
+        root.takeStartView();
+        // Picks up projects saved or edited while the menu was closed.
+        Projects.refresh();
         // Deferred: grabFocus is bound to shouldOpen, so the surface has not taken
-        // keyboard focus yet at the moment this signal fires.
-        Qt.callLater(() => searchInput.forceActiveFocus());
+        // keyboard focus yet at the moment this signal fires. The save field
+        // focuses itself instead when it was asked for.
+        Qt.callLater(() => {
+            if (!root.saveFocus)
+                searchInput.forceActiveFocus();
+        });
+    }
+
+    // A page asked for over IPC (Popouts.startView). Read once and cleared, so
+    // the next ordinary open is home again.
+    function takeStartView() {
+        const wanted = Popouts.startView;
+        if (wanted === "")
+            return;
+        Popouts.startView = "";
+        searchInput.text = "";
+        root.saveFocus = wanted === "projects-save";
+        root.view = wanted === "projects-save" ? "projects" : wanted;
+    }
+
+    // The same request while the menu is already up: no open transition to
+    // hang it on.
+    Connections {
+        target: Popouts
+        function onStartViewChanged() {
+            if (root.shouldOpen && Popouts.startView !== "")
+                root.takeStartView();
+        }
     }
 
     // The menu opens over a delegate in the body; switching views destroys it.
-    onModeChanged: root.menuOpen = false
+    onModeChanged: {
+        root.menuOpen = false;
+        root.renaming = "";
+    }
     onCategoryChanged: root.menuOpen = false
 
     onQueryChanged: root.selectedIndex = 0
@@ -458,6 +538,81 @@ Popout {
                     trigger: () => root.run(action.trigger)
                 });
             }
+        }
+        return items;
+    }
+
+    function saveProject(name) {
+        const trimmed = (name ?? "").trim();
+        if (trimmed === "")
+            return;
+        root.run(() => Projects.save(trimmed));
+    }
+
+    function openProjectMenu(project, anchor) {
+        if (!project)
+            return;
+        const at = anchor.mapToItem(tileMenu, 0, anchor.height);
+        tileMenu.originX = at.x;
+        tileMenu.originY = at.y;
+        root.deleteArmed = "";
+        tileMenu.model = root.projectMenuFor(project);
+        tileMenu.headerText = project.name;
+        root.menuOpen = true;
+    }
+
+    // Delete takes two clicks, like the destructive power buttons: the first
+    // keeps the menu open and rebuilds it with the confirming entry in place.
+    function projectMenuFor(project) {
+        const open = Projects.workspaceFor(project.name);
+        const items = [
+            {
+                text: open ? `Go to workspace ${open.id}` : "Open",
+                glyph: open ? Icons.arrowRight : Icons.chevronRight,
+                trigger: () => root.run(() => Projects.focusOrLoad(project.name))
+            }
+        ];
+        // Loading always starts fresh copies of the apps, so while the project
+        // is open the plain entry above is a jump and this is the way to a copy.
+        if (open) {
+            items.push({
+                text: "Open another copy",
+                glyph: Icons.plus,
+                trigger: () => root.run(() => Projects.load(project.name))
+            });
+        }
+        items.push({
+            text: "Save this workspace over it",
+            glyph: Icons.save,
+            trigger: () => root.run(() => Projects.save(project.name))
+        }, {
+            separator: true
+        }, {
+            text: "Rename",
+            glyph: Icons.rename,
+            trigger: () => root.renaming = project.name
+        });
+        if (root.deleteArmed === project.name) {
+            items.push({
+                text: "Click again to delete",
+                glyph: Icons.trash,
+                danger: true,
+                trigger: () => {
+                    root.deleteArmed = "";
+                    Projects.remove(project.name);
+                }
+            });
+        } else {
+            items.push({
+                text: "Delete",
+                glyph: Icons.trash,
+                danger: true,
+                keepOpen: true,
+                trigger: () => {
+                    root.deleteArmed = project.name;
+                    tileMenu.model = root.projectMenuFor(project);
+                }
+            });
         }
         return items;
     }
@@ -654,7 +809,17 @@ Popout {
                     height: item ? item.implicitHeight : 0
                     // Recreated on every switch, which resets the scroll position —
                     // landing halfway down a list you just opened would be worse.
-                    sourceComponent: root.mode === "results" ? resultsView : (root.mode === "all" ? allAppsView : (root.mode === "settings" ? settingsView : homeView))
+                    sourceComponent: {
+                        if (root.mode === "results")
+                            return resultsView;
+                        if (root.mode === "all")
+                            return allAppsView;
+                        if (root.mode === "settings")
+                            return settingsView;
+                        if (root.mode === "projects")
+                            return projectsView;
+                        return homeView;
+                    }
                 }
             }
 
@@ -1036,6 +1201,22 @@ Popout {
 
                 IconButton {
                     anchors.verticalCenter: parent.verticalCenter
+                    visible: Projects.available
+                    icon: Icons.project
+                    fontSize: Theme.fsIcon
+                    active: root.view === "projects"
+                    colour: Theme.text
+                    tooltip: "Projects"
+                    onClicked: {
+                        searchInput.text = "";
+                        root.saveFocus = false;
+                        root.view = root.view === "projects" ? "home" : "projects";
+                        searchInput.forceActiveFocus();
+                    }
+                }
+
+                IconButton {
+                    anchors.verticalCenter: parent.verticalCenter
                     icon: Icons.settings
                     fontSize: Theme.fsIcon
                     active: root.view === "settings"
@@ -1154,6 +1335,33 @@ Popout {
 
             SectionHeader {
                 width: parent.width
+                visible: root.showProjects
+                text: "Projects"
+                glyph: Icons.project
+
+                IconButton {
+                    icon: Icons.chevronRight
+                    label: "All projects"
+                    fontSize: Theme.fsSm
+                    colour: Theme.muted
+                    horizontalPadding: Theme.sp2
+                    onClicked: root.view = "projects"
+                }
+            }
+
+            Column {
+                width: parent.width
+                spacing: 1
+                visible: root.showProjects
+
+                Repeater {
+                    model: root.showProjects ? root.homeProjects : []
+                    delegate: projectRow
+                }
+            }
+
+            SectionHeader {
+                width: parent.width
                 visible: root.runningGroups.length > 0
                 text: "Running"
                 glyph: Icons.window
@@ -1236,7 +1444,7 @@ Popout {
             // Only reachable on a fresh profile with no pins and nothing launched.
             Text {
                 width: parent.width
-                visible: root.pinnedEntries.length === 0 && root.runningGroups.length === 0 && root.recommendedEntries.length === 0
+                visible: root.pinnedEntries.length === 0 && root.runningGroups.length === 0 && root.recommendedEntries.length === 0 && !root.showProjects
                 horizontalAlignment: Text.AlignHCenter
                 topPadding: Theme.sp7
                 text: "Start typing to search, or open All apps to pin something here."
@@ -1244,6 +1452,193 @@ Popout {
                 font.pixelSize: Theme.fsSm
                 color: Theme.muted
                 wrapMode: Text.Wrap
+            }
+        }
+    }
+
+    // One saved project, on the home page and the Projects page alike. Click
+    // jumps to it when it is open and opens it otherwise; right-click is the
+    // rest. While being renamed the row is an edit field instead.
+    Component {
+        id: projectRow
+
+        Item {
+            id: projectEntry
+            required property var modelData
+
+            readonly property var openOn: Projects.workspaceFor(projectEntry.modelData.name)
+            readonly property bool editing: root.renaming === projectEntry.modelData.name
+
+            width: parent ? parent.width : 0
+            height: projectHit.implicitHeight
+
+            ListRow {
+                id: projectHit
+                anchors.fill: parent
+                visible: !projectEntry.editing
+
+                icon: Icons.project
+                iconColour: projectEntry.openOn ? Theme.accentBright : Theme.accentLight
+                title: projectEntry.modelData.name
+                subtitle: {
+                    const n = projectEntry.modelData.windows;
+                    const count = n === 1 ? "1 window" : `${n} windows`;
+                    return projectEntry.openOn ? `Open on workspace ${projectEntry.openOn.id}  ·  ${count}` : count;
+                }
+
+                onClicked: root.run(() => Projects.focusOrLoad(projectEntry.modelData.name))
+                onRightClicked: root.openProjectMenu(projectEntry.modelData, projectHit)
+
+                // No anchors on this one: ListRow's trailing slot sizes itself
+                // from childrenRect.
+                Row {
+                    spacing: Theme.sp1
+
+                    Repeater {
+                        model: Projects.iconsFor(projectEntry.modelData, 4)
+
+                        delegate: IconImage {
+                            required property var modelData
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 16
+                            height: 16
+                            source: modelData
+                            asynchronous: true
+                        }
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        leftPadding: Theme.sp2
+                        text: projectEntry.openOn ? Icons.arrowRight : Icons.chevronRight
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fsSm
+                        color: projectEntry.openOn ? Theme.accentBright : Theme.muted
+                    }
+                }
+            }
+
+            InputField {
+                id: renameField
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                visible: projectEntry.editing
+                placeholder: "New name"
+
+                onVisibleChanged: {
+                    if (!visible)
+                        return;
+                    renameField.text = projectEntry.modelData.name;
+                    Qt.callLater(() => {
+                        renameField.input.forceActiveFocus();
+                        renameField.input.selectAll();
+                    });
+                }
+                onAccepted: {
+                    Projects.rename(projectEntry.modelData.name, renameField.text);
+                    root.renaming = "";
+                    searchInput.forceActiveFocus();
+                }
+                // Escape cancels the rename rather than closing the menu (the
+                // panel lets go of the key meanwhile, see holdEscape).
+                Keys.onEscapePressed: event => {
+                    root.renaming = "";
+                    searchInput.forceActiveFocus();
+                    event.accepted = true;
+                }
+            }
+        }
+    }
+
+    Component {
+        id: projectsView
+
+        Column {
+            width: bodyLoader.width
+            spacing: Theme.sp3
+
+            SectionHeader {
+                width: parent.width
+                text: Projects.current === "" ? "Save this workspace" : `This workspace  ·  ${Projects.current}`
+                glyph: Icons.save
+            }
+
+            Item {
+                width: parent.width
+                height: saveField.implicitHeight
+
+                InputField {
+                    id: saveField
+                    anchors.left: parent.left
+                    anchors.right: saveButton.left
+                    anchors.rightMargin: Theme.sp2
+                    placeholder: "Project name"
+                    // Prefilled with the workspace's own label, so saving a
+                    // project you are working in again is one keystroke.
+                    text: Projects.current
+
+                    onAccepted: root.saveProject(saveField.text)
+                    Component.onCompleted: {
+                        if (!root.saveFocus)
+                            return;
+                        Qt.callLater(() => {
+                            saveField.input.forceActiveFocus();
+                            saveField.input.selectAll();
+                        });
+                    }
+                }
+
+                IconButton {
+                    id: saveButton
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    icon: Icons.save
+                    label: Projects.byName(saveField.text.trim()) ? "Update" : "Save"
+                    fontSize: Theme.fsSm
+                    colour: saveField.text.trim() === "" ? Theme.muted : Theme.accentLight
+                    horizontalPadding: Theme.sp3
+                    onClicked: root.saveProject(saveField.text)
+                }
+            }
+
+            Text {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                text: "Keeps the apps open on this workspace and where their windows are. Opening a project starts them again on a free workspace, labeled with its name."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsXs
+                color: Theme.muted
+            }
+
+            SectionHeader {
+                width: parent.width
+                visible: Projects.list.length > 0
+                text: "Saved projects"
+                glyph: Icons.project
+            }
+
+            Column {
+                width: parent.width
+                spacing: 1
+
+                Repeater {
+                    model: Projects.list
+                    delegate: projectRow
+                }
+            }
+
+            Text {
+                width: parent.width
+                visible: Projects.list.length === 0
+                horizontalAlignment: Text.AlignHCenter
+                topPadding: Theme.sp5
+                wrapMode: Text.WordWrap
+                text: "No projects yet. Name this workspace above to save the first one."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsSm
+                color: Theme.muted
             }
         }
     }
