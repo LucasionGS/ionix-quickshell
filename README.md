@@ -30,7 +30,8 @@ Replaces waybar in [Ionix](https://github.com/LucasionGS/ionix-iso).
 - **Project workspaces** — with the Ionix `ionix-project` CLI installed, a workspace's apps and
   layout can be saved under a name and opened again later on a free workspace. The name labels
   the workspace in the bar and on the Alt+Tab cards, and the start menu gets a Projects page
-  (save, open, rename, delete) and search results. Without the CLI the feature stays hidden.
+  (save, open, rename, delete, and *Edit apps* to change the command, folder and window
+  class each app starts with) and search results. Without the CLI the feature stays hidden.
 
 ## Install
 

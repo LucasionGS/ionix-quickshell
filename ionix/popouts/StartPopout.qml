@@ -26,13 +26,13 @@ Popout {
 
     panelWidth: Config.start.width
     padding: Theme.sp5
-    // A project being renamed takes Escape to cancel the edit.
-    holdEscape: root.renaming !== ""
+    // A project being renamed, or an app's form, takes Escape to cancel the edit.
+    holdEscape: root.renaming !== "" || root.appEditing > 0
 
     // ── State ───────────────────────────────────────────────────────────────
 
     property string query: ""
-    // home | all | settings | projects — which face the body shows when nothing is typed. A
+    // home | all | settings | projects | project-apps — which face the body shows when nothing is typed. A
     // non-empty query always wins, so `mode` rather than `view` is what the body
     // switches on.
     property string view: "home"
@@ -49,6 +49,11 @@ Popout {
     property string renaming: ""
     property string deleteArmed: ""
     property bool saveFocus: false
+    // Project apps page: the project it shows, the app (its `n`) whose form is
+    // open, and the one whose Remove has been clicked once. 0 is none.
+    property string appsProject: ""
+    property int appEditing: 0
+    property int appRemoveArmed: 0
 
     readonly property bool searching: root.query.trim() !== ""
     readonly property string mode: root.searching ? "results" : root.view
@@ -388,6 +393,8 @@ Popout {
         root.renaming = "";
         root.deleteArmed = "";
         root.saveFocus = false;
+        root.appsProject = "";
+        Projects.loadApps("");
         searchInput.text = "";
         root.takeStartView();
         // Picks up projects saved or edited while the menu was closed.
@@ -427,11 +434,19 @@ Popout {
     onModeChanged: {
         root.menuOpen = false;
         root.renaming = "";
+        root.appEditing = 0;
+        root.appRemoveArmed = 0;
     }
     onCategoryChanged: root.menuOpen = false
 
     onQueryChanged: root.selectedIndex = 0
-    onViewChanged: root.selectedIndex = 0
+    onViewChanged: {
+        root.selectedIndex = 0;
+        if (root.view !== "project-apps" && root.appsProject !== "") {
+            root.appsProject = "";
+            Projects.loadApps("");
+        }
+    }
 
     function move(delta) {
         const count = root.navItems.length;
@@ -561,6 +576,29 @@ Popout {
         root.menuOpen = true;
     }
 
+    function openProjectApps(name) {
+        searchInput.text = "";
+        root.appsProject = name;
+        Projects.loadApps(name);
+        root.view = "project-apps";
+    }
+
+    // Only what differs from the row is sent, so saving an untouched form is a
+    // no-op and an unchanged command never turns into a custom one.
+    function saveApp(app, exec, cwd, cls) {
+        const fields = {};
+        if (exec.trim() !== app.launch)
+            fields.exec = exec.trim();
+        if (cwd.trim() !== app.cwd)
+            fields.cwd = cwd.trim();
+        if (cls.trim() !== app.class)
+            fields.class = cls.trim();
+        if (Object.keys(fields).length > 0)
+            Projects.editApp(root.appsProject, app.n, fields);
+        root.appEditing = 0;
+        searchInput.forceActiveFocus();
+    }
+
     // Delete takes two clicks, like the destructive power buttons: the first
     // keeps the menu open and rebuilds it with the confirming entry in place.
     function projectMenuFor(project) {
@@ -587,6 +625,10 @@ Popout {
             trigger: () => root.run(() => Projects.save(project.name))
         }, {
             separator: true
+        }, {
+            text: "Edit apps",
+            glyph: Icons.settings,
+            trigger: () => root.openProjectApps(project.name)
         }, {
             text: "Rename",
             glyph: Icons.rename,
@@ -617,7 +659,8 @@ Popout {
         return items;
     }
 
-    // Keep the keyboard cursor on screen without scrolling for mouse hover.
+    // Keep the keyboard cursor on screen without scrolling for mouse hover. An
+    // item taller than the body (an open app form) keeps its top in view.
     function ensureVisible(item) {
         if (!item || !flick.interactive || !flick.contentItem)
             return;
@@ -626,7 +669,7 @@ Popout {
         if (top < flick.contentY)
             flick.contentY = top;
         else if (bottom > flick.contentY + flick.height)
-            flick.contentY = bottom - flick.height;
+            flick.contentY = Math.min(top, bottom - flick.height);
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
@@ -818,6 +861,8 @@ Popout {
                             return settingsView;
                         if (root.mode === "projects")
                             return projectsView;
+                        if (root.mode === "project-apps")
+                            return projectAppsView;
                         return homeView;
                     }
                 }
@@ -1202,11 +1247,11 @@ Popout {
                 IconButton {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: Projects.available
-                    icon: Icons.project
+                    icon: root.view === "project-apps" ? Icons.chevronLeft : Icons.project
                     fontSize: Theme.fsIcon
-                    active: root.view === "projects"
+                    active: root.view === "projects" || root.view === "project-apps"
                     colour: Theme.text
-                    tooltip: "Projects"
+                    tooltip: root.view === "project-apps" ? "Back to projects" : "Projects"
                     onClicked: {
                         searchInput.text = "";
                         root.saveFocus = false;
@@ -1639,6 +1684,269 @@ Popout {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fsSm
                 color: Theme.muted
+            }
+        }
+    }
+
+    // A labelled field in a project app's form. Escape is passed up rather
+    // than closing the menu (the panel lets go of the key meanwhile, see
+    // holdEscape).
+    component AppField: Column {
+        id: field
+        property alias text: fieldInput.text
+        property alias input: fieldInput.input
+        property alias placeholder: fieldInput.placeholder
+        property alias valid: fieldInput.valid
+        property string label: ""
+
+        signal accepted
+        signal escaped
+
+        spacing: Theme.sp1
+
+        Text {
+            text: field.label
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fsXs
+            color: Theme.muted
+        }
+
+        InputField {
+            id: fieldInput
+            width: parent.width
+            onAccepted: field.accepted()
+            Keys.onEscapePressed: event => {
+                field.escaped();
+                event.accepted = true;
+            }
+        }
+    }
+
+    // One project's apps, each a row that opens a form for how it is started.
+    // A capture only knows the command line, not what the app had open — VS
+    // Code's folder, a browser profile — so this is where that gets put back.
+    Component {
+        id: projectAppsView
+
+        Column {
+            width: bodyLoader.width
+            spacing: Theme.sp3
+
+            SectionHeader {
+                width: parent.width
+                text: `${root.appsProject}  ·  apps`
+                glyph: Icons.project
+            }
+
+            Text {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                text: "Opening the project runs each app's command in its folder, then waits for a window of its class. Click an app to change how it starts."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsXs
+                color: Theme.muted
+            }
+
+            Column {
+                width: parent.width
+                spacing: 1
+
+                Repeater {
+                    model: Projects.apps
+                    delegate: projectAppRow
+                }
+            }
+
+            Text {
+                width: parent.width
+                visible: Projects.apps.length === 0
+                horizontalAlignment: Text.AlignHCenter
+                topPadding: Theme.sp5
+                wrapMode: Text.WordWrap
+                text: "No apps to show. The project may have been renamed or deleted."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsSm
+                color: Theme.muted
+            }
+        }
+    }
+
+    Component {
+        id: projectAppRow
+
+        Column {
+            id: appEntry
+            required property var modelData
+
+            readonly property bool open: root.appEditing === appEntry.modelData.n
+            readonly property bool custom: appEntry.modelData.exec !== ""
+            readonly property bool canSave: classField.text.trim() !== ""
+
+            width: parent ? parent.width : 0
+            spacing: Theme.sp2
+            bottomPadding: appEntry.open ? Theme.sp3 : 0
+
+            // The form is filled when it opens rather than bound, so a refresh
+            // landing mid-edit cannot overwrite what is being typed.
+            function fill() {
+                commandField.text = appEntry.modelData.launch;
+                folderField.text = appEntry.modelData.cwd;
+                classField.text = appEntry.modelData.class;
+                Qt.callLater(() => commandField.input.forceActiveFocus());
+            }
+
+            function save() {
+                if (appEntry.canSave)
+                    root.saveApp(appEntry.modelData, commandField.text, folderField.text, classField.text);
+            }
+
+            function cancel() {
+                root.appEditing = 0;
+                searchInput.forceActiveFocus();
+            }
+
+            onOpenChanged: {
+                root.appRemoveArmed = 0;
+                if (appEntry.open)
+                    appEntry.fill();
+            }
+            // Scrolled to once the form has been laid out, not when it opens.
+            onHeightChanged: {
+                if (appEntry.open)
+                    root.ensureVisible(appEntry);
+            }
+            Component.onCompleted: {
+                if (appEntry.open)
+                    appEntry.fill();
+            }
+
+            ListRow {
+                width: parent.width
+                iconSource: Projects.iconsFor({
+                    apps: [appEntry.modelData.class]
+                }, 1)[0] ?? ""
+                icon: Icons.window
+                title: appEntry.modelData.class
+                subtitle: appEntry.modelData.cwd === "" ? appEntry.modelData.launch : `${appEntry.modelData.launch}  ·  in ${appEntry.modelData.cwd}`
+                selected: appEntry.open
+
+                onClicked: root.appEditing = appEntry.open ? 0 : appEntry.modelData.n
+
+                Row {
+                    spacing: Theme.sp2
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: appEntry.custom
+                        text: "custom"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fsXs
+                        color: Theme.accentLight
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: appEntry.open ? Icons.chevronUp : Icons.chevronDown
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fsSm
+                        color: Theme.muted
+                    }
+                }
+            }
+
+            Column {
+                id: form
+                x: Theme.sp3
+                width: parent.width - Theme.sp3 * 2
+                spacing: Theme.sp2
+                visible: appEntry.open
+
+                AppField {
+                    id: commandField
+                    width: parent.width
+                    label: "Command"
+                    placeholder: appEntry.modelData.command === "" ? "Shell command that starts it" : appEntry.modelData.command
+                    onAccepted: appEntry.save()
+                    onEscaped: appEntry.cancel()
+                }
+
+                Text {
+                    width: parent.width
+                    visible: appEntry.custom && appEntry.modelData.command !== ""
+                    wrapMode: Text.WordWrap
+                    text: `Captured: ${appEntry.modelData.command}  ·  clear the field to go back to it`
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fsXs
+                    color: Theme.muted
+                }
+
+                AppField {
+                    id: folderField
+                    width: parent.width
+                    label: "Folder"
+                    placeholder: "Home folder"
+                    onAccepted: appEntry.save()
+                    onEscaped: appEntry.cancel()
+                }
+
+                AppField {
+                    id: classField
+                    width: parent.width
+                    label: "Window class"
+                    placeholder: "Required: the class of the window it opens"
+                    valid: appEntry.canSave
+                    onAccepted: appEntry.save()
+                    onEscaped: appEntry.cancel()
+                }
+
+                Item {
+                    width: parent.width
+                    height: 28
+
+                    IconButton {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Projects.apps.length > 1
+                        horizontalPadding: Theme.sp2
+                        icon: Icons.trash
+                        label: root.appRemoveArmed === appEntry.modelData.n ? "Click again to remove" : "Remove from project"
+                        fontSize: Theme.fsSm
+                        colour: root.appRemoveArmed === appEntry.modelData.n ? Theme.red : Theme.muted
+                        hoverColour: Theme.red
+                        onClicked: {
+                            if (root.appRemoveArmed !== appEntry.modelData.n) {
+                                root.appRemoveArmed = appEntry.modelData.n;
+                                return;
+                            }
+                            Projects.removeApp(root.appsProject, appEntry.modelData.n);
+                            appEntry.cancel();
+                        }
+                    }
+
+                    Row {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.sp3
+
+                        IconButton {
+                            horizontalPadding: Theme.sp2
+                            label: "Cancel"
+                            fontSize: Theme.fsSm
+                            colour: Theme.muted
+                            onClicked: appEntry.cancel()
+                        }
+
+                        IconButton {
+                            horizontalPadding: Theme.sp3
+                            icon: Icons.check
+                            label: "Save"
+                            fontSize: Theme.fsSm
+                            colour: appEntry.canSave ? Theme.accentLight : Theme.border
+                            hoverColour: appEntry.canSave ? Theme.accentBright : Theme.border
+                            onClicked: appEntry.save()
+                        }
+                    }
+                }
             }
         }
     }

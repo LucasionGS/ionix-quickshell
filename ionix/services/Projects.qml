@@ -36,6 +36,14 @@ Singleton {
     //   { name, slug, file, windows, apps: [class…], savedAt }
     property var list: []
 
+    // The apps of one project, for the start menu's editor: rows from
+    // `ionix-project apps <name> --json`, numbered from 1 as the CLI takes them:
+    //   { n, class, title, desktop, command, exec, launch, cwd, floating }
+    // `command` is what was captured, `exec` a hand-set replacement ("" when
+    // none) and `launch` whichever of the two runs.
+    property string appsOf: ""
+    property var apps: []
+
     // The focused workspace's label, "" when it has none.
     readonly property string current: root.labelFor(Hyprland.focusedWorkspace)
 
@@ -132,6 +140,49 @@ Singleton {
         root.run(["delete", name]);
     }
 
+    // `fields` holds any of exec, cwd and class; an empty exec goes back to
+    // the captured command, an empty cwd drops the folder. Values go as
+    // `--flag=value` so one starting with a dash is not read as an option.
+    function editApp(name, n, fields) {
+        const args = ["app", name, String(n)];
+        for (const key of ["exec", "cwd", "class"]) {
+            if (fields[key] !== undefined)
+                args.push(`--${key}=${fields[key]}`);
+        }
+        root.run(args);
+    }
+
+    function removeApp(name, n) {
+        root.run(["app", name, String(n), "--remove"]);
+    }
+
+    // Start (or stop, with "") following one project's apps. They are re-read
+    // with every refresh, which the CLI sends after each change.
+    function loadApps(name) {
+        root.appsOf = name ?? "";
+        // Forget the last read, or reopening the same project would find it
+        // unchanged and leave `apps` empty.
+        appsLister.last = "";
+        if (root.appsOf === "") {
+            root.apps = [];
+            return;
+        }
+        root.reloadApps();
+    }
+
+    property bool appsStale: false
+
+    function reloadApps() {
+        if (!root.installed || root.appsOf === "")
+            return;
+        if (appsLister.running) {
+            root.appsStale = true;
+            return;
+        }
+        appsLister.command = [root.bin, "apps", root.appsOf, "--json"];
+        appsLister.running = true;
+    }
+
     function label(name) {
         const trimmed = (name ?? "").trim();
         root.run(trimmed === "" ? ["label", "--clear"] : ["label", trimmed]);
@@ -148,6 +199,7 @@ Singleton {
             return;
         }
         lister.running = true;
+        root.reloadApps();
     }
 
     // Wrapped in sh for the same reason Themes is: a missing CLI is a clean
@@ -181,6 +233,42 @@ Singleton {
             if (root.stale) {
                 root.stale = false;
                 Qt.callLater(() => lister.running = true);
+            }
+        }
+    }
+
+    Process {
+        id: appsLister
+
+        // The raw text of the last read: a refresh that changed nothing must
+        // not hand the editor a new array, which would rebuild its rows and
+        // throw away whatever is being typed into one.
+        property string last: ""
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                // Read for a project the editor has since left.
+                if (appsLister.command[2] !== root.appsOf || this.text === appsLister.last)
+                    return;
+                try {
+                    const data = JSON.parse(this.text);
+                    appsLister.last = this.text;
+                    root.apps = Array.isArray(data?.apps) ? data.apps : [];
+                } catch (e) {
+                    console.warn(`[ionix] ionix-project apps: ${e}`);
+                }
+            }
+        }
+
+        onExited: code => {
+            // The project is gone (deleted, or renamed from somewhere else).
+            if (code !== 0 && appsLister.command[2] === root.appsOf) {
+                appsLister.last = "";
+                root.apps = [];
+            }
+            if (root.appsStale) {
+                root.appsStale = false;
+                Qt.callLater(root.reloadApps);
             }
         }
     }
