@@ -35,9 +35,9 @@ Item {
             if (Config.start.enabled)
                 Popouts.toggle("start", root.bar?.screen);
             else
-                Quickshell.execDetached(Config.launcher.command);
+                Launch.run(Config.launcher.command);
         }
-        onMiddleClicked: Quickshell.execDetached(Config.launcher.middleCommand)
+        onMiddleClicked: Launch.run(Config.launcher.middleCommand)
         onRightClicked: Popouts.toggle("power", root.bar?.screen)
     }
 

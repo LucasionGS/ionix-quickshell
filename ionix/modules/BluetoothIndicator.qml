@@ -51,7 +51,7 @@ Item {
             if (root.adapter)
                 root.adapter.enabled = !root.adapter.enabled;
         }
-        onRightClicked: Quickshell.execDetached(["blueman-manager"])
+        onRightClicked: Launch.run(["blueman-manager"])
 
         // Count badge, only once it's ambiguous which device is meant.
         Rectangle {

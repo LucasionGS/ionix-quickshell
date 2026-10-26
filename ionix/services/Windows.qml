@@ -125,15 +125,16 @@ Singleton {
 
     // Context-menu model for a window, in the shape ContextMenu expects.
     //
-    // Each action runs execute(), which launches it detached through the entry's
-    // own Exec line — these start new instances, they don't manipulate the window
-    // that was clicked. Close is the one entry not sourced from the desktop file;
-    // it acts on this specific window via the wlr handle.
+    // Each action launches the entry's own Exec line through Launch — these start
+    // new instances, they don't manipulate the window that was clicked. Close is
+    // the one entry not sourced from the desktop file; it acts on this specific
+    // window via the wlr handle.
     function menuFor(toplevel) {
+        const entry = root.entryFor(toplevel);
         const items = root.actionsFor(toplevel).map(action => ({
                     text: action.name,
                     icon: action.icon ?? "",
-                    trigger: () => action.execute()
+                    trigger: () => Launch.entry(entry, action)
                 }));
 
         if (items.length > 0)

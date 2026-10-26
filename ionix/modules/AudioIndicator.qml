@@ -32,7 +32,7 @@ Item {
 
         onClicked: Popouts.toggle("audio", root.bar?.screen)
         onMiddleClicked: Audio.toggleMute()
-        onRightClicked: Quickshell.execDetached(["pavucontrol"])
+        onRightClicked: Launch.run(["pavucontrol"])
         onScrolled: direction => Audio.stepVolume(direction)
 
         // Level bar, hidden when muted so "muted" and "zero volume" don't look alike.

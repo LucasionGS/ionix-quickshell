@@ -58,7 +58,7 @@ Item {
         }
 
         onClicked: Popouts.toggle("network", root.bar?.screen)
-        onRightClicked: Quickshell.execDetached(["nm-connection-editor"])
+        onRightClicked: Launch.run(["nm-connection-editor"])
 
         // Pulse while a connection is being established.
         SequentialAnimation on opacity {

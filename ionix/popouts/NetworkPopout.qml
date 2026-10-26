@@ -377,7 +377,7 @@ Popout {
                 colour: Theme.muted
                 onClicked: {
                     Popouts.close();
-                    Quickshell.execDetached(["nm-connection-editor"]);
+                    Launch.run(["nm-connection-editor"]);
                 }
             }
         }
