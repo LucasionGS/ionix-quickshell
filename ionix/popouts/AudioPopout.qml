@@ -311,7 +311,7 @@ Popout {
                 colour: Theme.muted
                 onClicked: {
                     Popouts.close();
-                    Quickshell.execDetached(["pavucontrol"]);
+                    Launch.run(["pavucontrol"]);
                 }
             }
         }

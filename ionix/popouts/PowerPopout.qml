@@ -288,7 +288,7 @@ Popout {
                             disarm.stop();
                             root.armed = "";
                             Popouts.close();
-                            Quickshell.execDetached(tile.modelData.command);
+                            Launch.run(tile.modelData.command);
                         }
                     }
                 }

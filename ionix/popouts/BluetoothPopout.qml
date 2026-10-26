@@ -270,7 +270,7 @@ Popout {
                 colour: Theme.muted
                 onClicked: {
                     Popouts.close();
-                    Quickshell.execDetached(["blueman-manager"]);
+                    Launch.run(["blueman-manager"]);
                 }
             }
         }

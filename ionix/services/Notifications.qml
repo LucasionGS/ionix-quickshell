@@ -186,7 +186,7 @@ Singleton {
     }
 
     function openLink(url) {
-        Quickshell.execDetached(["xdg-open", url]);
+        Launch.run(["xdg-open", url]);
     }
 
     // ── Presentation helpers ────────────────────────────────────────────────

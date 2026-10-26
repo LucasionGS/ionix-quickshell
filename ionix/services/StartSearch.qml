@@ -247,35 +247,35 @@ Singleton {
                 subtitle: "Lock the session",
                 glyph: Icons.lock,
                 keywords: ["lock", "screen", "hyprlock"],
-                run: () => Quickshell.execDetached(power.lock)
+                run: () => Launch.run(power.lock)
             },
             {
                 title: "Log out",
                 subtitle: "End the session",
                 glyph: Icons.logout,
                 keywords: ["logout", "log out", "sign out", "exit"],
-                run: () => Quickshell.execDetached(power.logout)
+                run: () => Launch.run(power.logout)
             },
             {
                 title: "Suspend",
                 subtitle: "Sleep",
                 glyph: Icons.suspend,
                 keywords: ["suspend", "sleep"],
-                run: () => Quickshell.execDetached(power.suspend)
+                run: () => Launch.run(power.suspend)
             },
             {
                 title: "Restart",
                 subtitle: "Reboot the machine",
                 glyph: Icons.reboot,
                 keywords: ["restart", "reboot"],
-                run: () => Quickshell.execDetached(power.reboot)
+                run: () => Launch.run(power.reboot)
             },
             {
                 title: "Shut down",
                 subtitle: "Power off the machine",
                 glyph: Icons.shutdown,
                 keywords: ["shutdown", "shut down", "power off", "poweroff", "halt"],
-                run: () => Quickshell.execDetached(power.shutdown)
+                run: () => Launch.run(power.shutdown)
             }
         ];
     }

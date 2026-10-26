@@ -185,7 +185,7 @@ Singleton {
         if (!entry)
             return;
         StartState.recordLaunch(entry.id);
-        entry.execute();
+        Launch.entry(entry);
     }
 
     // The entry's own Actions= list, in the shape the menus want. Identical in
@@ -202,7 +202,7 @@ Singleton {
                 icon: action.icon ?? "",
                 trigger: () => {
                     StartState.recordLaunch(entry.id);
-                    action.execute();
+                    Launch.entry(entry, action);
                 }
             });
         }

@@ -1019,7 +1019,7 @@ Popout {
                                 }
                                 disarm.stop();
                                 root.armed = "";
-                                root.run(() => Quickshell.execDetached(tile.modelData.command));
+                                root.run(() => Launch.run(tile.modelData.command));
                             }
                         }
                     }

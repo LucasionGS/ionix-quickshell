@@ -417,7 +417,7 @@ Singleton {
 
     function openUrl(url) {
         if (url && url !== "")
-            Quickshell.execDetached(["xdg-open", url]);
+            Launch.run(["xdg-open", url]);
     }
 
     function join(e) {
