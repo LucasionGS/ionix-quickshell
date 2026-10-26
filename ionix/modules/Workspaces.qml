@@ -73,7 +73,15 @@ Item {
         return result;
     }
 
-    readonly property int activeIndex: root.items.findIndex(i => i.active)
+    // The active workspace's dot, which the blob follows. Each delegate claims
+    // this itself rather than the blob looking it up with `dots.itemAt()`: a
+    // function call is not a binding dependency, and since `items` is a plain
+    // array the Repeater rebuilds every delegate on any change (a window opening,
+    // a workspace closing or moving). When the active index came out the same,
+    // the blob stayed bound to the destroyed delegate's geometry and ignored the
+    // new one — most visibly a project label widening the dot under a blob still
+    // sized for a bare dot.
+    property Item activeDot: null
     readonly property bool vertical: Config.barVertical
 
     // Thickness of the dot strip on the bar's short axis, the same either way.
@@ -98,31 +106,11 @@ Item {
             // it reads as the indicator moving rather than two things blinking.
             SlidingIndicator {
                 vertical: root.vertical
-                active: root.activeIndex >= 0
-                targetX: {
-                    if (root.vertical || root.activeIndex < 0)
-                        return 0;
-                    return dots.itemAt(root.activeIndex)?.x ?? 0;
-                }
-                targetY: {
-                    if (!root.vertical || root.activeIndex < 0)
-                        return 0;
-                    return dots.itemAt(root.activeIndex)?.y ?? 0;
-                }
-                targetWidth: {
-                    if (root.vertical)
-                        return root.lane;
-                    if (root.activeIndex < 0)
-                        return 0;
-                    return dots.itemAt(root.activeIndex)?.width ?? 0;
-                }
-                targetHeight: {
-                    if (!root.vertical)
-                        return root.lane;
-                    if (root.activeIndex < 0)
-                        return 0;
-                    return dots.itemAt(root.activeIndex)?.height ?? 0;
-                }
+                active: root.activeDot !== null
+                targetX: root.vertical ? 0 : (root.activeDot?.x ?? 0)
+                targetY: root.vertical ? (root.activeDot?.y ?? 0) : 0
+                targetWidth: root.vertical ? root.lane : (root.activeDot?.width ?? 0)
+                targetHeight: root.vertical ? (root.activeDot?.height ?? 0) : root.lane
             }
 
             Grid {
@@ -165,6 +153,17 @@ Item {
 
                         width: root.vertical ? root.lane : span
                         height: root.vertical ? span : root.lane
+
+                        // On a rebuild the replacement may claim the blob before
+                        // this one is destroyed, so only release it if still ours.
+                        Component.onCompleted: {
+                            if (dot.isActive)
+                                root.activeDot = dot;
+                        }
+                        Component.onDestruction: {
+                            if (root.activeDot === dot)
+                                root.activeDot = null;
+                        }
 
                         Behavior on width {
                             NumberAnimation {
