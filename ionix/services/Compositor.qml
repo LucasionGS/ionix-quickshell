@@ -46,6 +46,11 @@ Singleton {
         root.dispatch(`workspace ${spec}`, `hl.dsp.focus({ workspace = "${spec}" })`);
     }
 
+    // Renaming a workspace to its own id is how a label is cleared.
+    function renameWorkspace(id, name) {
+        root.dispatch(`renameworkspace ${id} ${name}`, `hl.dsp.workspace.rename({ workspace = ${id}, name = ${JSON.stringify(name)} })`);
+    }
+
     function toggleSpecial(name) {
         root.dispatch(`togglespecialworkspace ${name}`, `hl.dsp.workspace.toggle_special("${name}")`);
     }
