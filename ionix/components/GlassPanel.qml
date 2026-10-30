@@ -23,12 +23,16 @@ Item {
     property url backdrop: ""
     // Opacity of the bgDeep wash over the backdrop: 0 shows the picture as is.
     property real backdropDim: 0.55
+    // No fill, stroke or shadow of its own: for a popout that lays out several
+    // panels with a gap between them, as NotificationCentre does.
+    property bool bare: false
 
     implicitWidth: inner.childrenRect.width + padding * 2
     implicitHeight: inner.childrenRect.height + padding * 2
 
     // Drawn behind the fill so the shadow doesn't wash out the border.
     RectangularShadow {
+        visible: !root.bare
         anchors.fill: bg
         radius: bg.radius
         blur: 48
@@ -39,6 +43,7 @@ Item {
 
     Rectangle {
         id: bg
+        visible: !root.bare
         anchors.fill: parent
         radius: Theme.rPanel
         color: root.fill
@@ -106,6 +111,7 @@ Item {
     // A one-pixel inner highlight along the top edge — cheap, and it stops the
     // panel reading as a flat rectangle against a dark wallpaper.
     Rectangle {
+        visible: !root.bare
         anchors.top: bg.top
         anchors.left: bg.left
         anchors.right: bg.right

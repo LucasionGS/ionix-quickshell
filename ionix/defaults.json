@@ -39,7 +39,8 @@
   },
 
   "modules": {
-    "left": ["Launcher", "Workspaces", "Taskbar"],
+    "_comment": "Each name is a file in modules/. Beyond the ones listed, any theme may use the flat building blocks: StartButton (for Launcher), SearchBox, AppTaskbar (for Taskbar: pinned and running per app), TrayOverflow (for Tray), StatusCluster (for the indicators, opens QuickSettings), ClockCluster (for Clock and NotificationBell, opens NotificationCentre). They work on all four bar edges and under any palette.",
+    "left": ["Launcher", "TaskViewButton", "Workspaces", "Taskbar"],
     "center": ["MediaWidget"],
     "right": [
       "Tray",
@@ -54,7 +55,7 @@
   },
 
   "theme": {
-    "_comment": "Any key here overrides config/Theme.qml. Shown with the built-in values.",
+    "_comment": "Any key here overrides config/Theme.qml. Shown with the built-in values. Also accepted: flat (true: controls change colour rather than size, neutral hover fills, thin sliders), flyoutGap (px between a panel and the bar and screen edge; 0 is the shell's own placement), the derived surfaces as #AARRGGBB (barFill, panelFill, tooltipFill, pillFill, pillBorder, barBorder, panelBorder, divider, subtleHover, subtlePressed, controlFill, controlStroke, fieldFill, footerFill, closeHover, onAccent), and numbers for rSm, rPill, rPanel, pillHeight, fsXs to fsTitle, durFast to durSlow.",
     "bgDeep": "#0f0a18",
     "bgWindow": "#1a1025",
     "bgCard": "#2d2d3f",
@@ -79,16 +80,19 @@
   "launcher": {
     "icon": "",
     "command": ["ioexplorer-spotlight"],
-    "middleCommand": ["ioexplorer-spotlight"]
+    "middleCommand": ["ioexplorer-spotlight"],
+    "searchWidth": 240
   },
 
   "start": {
-    "_comment": "The start menu behind the logo button. enabled:false gives the button back to launcher.command. maxHeightFraction is of the screen height — past that the menu body scrolls instead of growing. defaultPins is only a seed: as soon as you pin or unpin anything the list moves to $XDG_STATE_HOME/ionix/quickshell/start.json, which also holds the launch counts behind the Frequent section. Pins are desktop-entry ids without the '.desktop' suffix; ones naming apps you don't have are skipped, not drawn empty. The footer is titled with displayName, or when that is empty the account's full name (chfn -f), or the login; whenever the title is not the login, the login shows under it as user@host. avatar is a picture path (~ allowed); empty means the first of $XDG_CONFIG_HOME/quickshell/avatar.png and ~/.face that exists, re-checked every time the menu opens.",
+    "_comment": "The start menu behind the logo button. enabled:false gives the button back to launcher.command. layout \"sections\" is the home page with Pinned and Recommended at a fixed height over a footer strip; align \"center\" centres the menu on the screen, on a horizontal bar. maxHeightFraction is of the screen height — past that the menu body scrolls instead of growing. defaultPins is only a seed: as soon as you pin or unpin anything the list moves to $XDG_STATE_HOME/ionix/quickshell/start.json, which also holds the launch counts behind the Frequent section. Pins are desktop-entry ids without the '.desktop' suffix; ones naming apps you don't have are skipped, not drawn empty. The footer is titled with displayName, or when that is empty the account's full name (chfn -f), or the login; whenever the title is not the login, the login shows under it as user@host. avatar is a picture path (~ allowed); empty means the first of $XDG_CONFIG_HOME/quickshell/avatar.png and ~/.face that exists, re-checked every time the menu opens.",
     "enabled": true,
     "width": 620,
     "maxHeightFraction": 0.72,
     "columns": 6,
     "iconSize": 40,
+    "layout": "",
+    "align": "",
     "showRunning": true,
     "recommend": "frequent",
     "recommendCount": 8,
@@ -116,11 +120,13 @@
   },
 
   "taskbar": {
+    "_comment": "defaultPins seeds the AppTaskbar module's pinned apps, used until one is pinned or unpinned from it; the list then moves to start.json as taskbarPins. Same form as start.defaultPins.",
     "enabled": true,
     "maxWidth": 420,
     "iconSize": 22,
     "currentWorkspaceOnly": false,
-    "iconOverrides": {}
+    "iconOverrides": {},
+    "defaultPins": ["io.github.ionix.IoExplorer", "ionterm", "firefox", "code"]
   },
 
   "media": {
@@ -217,6 +223,12 @@
     "margin": 120
   },
 
+  "taskView": {
+    "_comment": "Every window of the current workspace as thumbnails over a strip of all workspaces, from the TaskViewButton module, Super+Tab or `qs -c ionix ipc call taskview toggle`. It keeps clear of the bar and takes its look from the theme. maxCardWidth caps a lone window's thumbnail, in pixels.",
+    "enabled": true,
+    "maxCardWidth": 560
+  },
+
   "windowSwitcher": {
     "_comment": "The Alt+Tab overlay. currentWorkspaceOnly:false offers every window everywhere in most-recently-used order, which is what the pre-overlay Alt+Tab bind reached; true narrows it to the focused workspace, Windows-style. livePreviews:false swaps the screencopy thumbnails for icon tiles — each visible card is otherwise a continuous capture stream. maxWidthFraction is of the screen width; past that the card grid wraps to further rows.",
     "enabled": true,
@@ -229,7 +241,8 @@
   },
 
   "lock": {
-    "_comment": "The lock screen, started by `ionix-lock` as its own Quickshell process (lock.qml) — it reads this same merged config, so it wears the active theme and follows it live while locked. background.image and background.video each take a path, or an object keyed by monitor name with \"*\" as the fallback. image may be a directory, which becomes a slideshow advancing every `interval` seconds; \"\" uses whatever awww is showing on that monitor. video is looped and muted, wins over image, needs qt6-multimedia-ffmpeg, and is skipped on battery unless videoOnBattery. blur and dim (0..1) apply while the password card is up. After screensaver.after idle seconds (0 = never) the card fades out, the picture clears and — with motion — slowly pans while the clock wanders. clockFormat \"\" follows clock.format. power adds suspend/restart/shut down buttons (the last two need a second click). fingerprint races fprintd against the password when a reader is present and stays silent when there isn't one.",
+    "layout": "",
+    "_comment": "layout \"bare\" puts the picture, name and field on the wallpaper with the clock fixed near the top; \"\" is the password card. The lock screen, started by `ionix-lock` as its own Quickshell process (lock.qml) — it reads this same merged config, so it wears the active theme and follows it live while locked. background.image and background.video each take a path, or an object keyed by monitor name with \"*\" as the fallback. image may be a directory, which becomes a slideshow advancing every `interval` seconds; \"\" uses whatever awww is showing on that monitor. video is looped and muted, wins over image, needs qt6-multimedia-ffmpeg, and is skipped on battery unless videoOnBattery. blur and dim (0..1) apply while the password card is up. After screensaver.after idle seconds (0 = never) the card fades out, the picture clears and — with motion — slowly pans while the clock wanders. clockFormat \"\" follows clock.format. power adds suspend/restart/shut down buttons (the last two need a second click). fingerprint races fprintd against the password when a reader is present and stays silent when there isn't one.",
     "background": {
       "image": "",
       "video": "",

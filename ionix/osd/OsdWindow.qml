@@ -47,7 +47,8 @@ PanelWindow {
         }
     }
 
-    readonly property color tint: Osd.kind === "brightness" ? Theme.orange : (Osd.muted ? Theme.red : Theme.accentBright)
+    // Flat themes do not colour-code the display by what it is showing.
+    readonly property color tint: Theme.flat ? Theme.accentBright : (Osd.kind === "brightness" ? Theme.orange : (Osd.muted ? Theme.red : Theme.accentBright))
 
     Item {
         id: card
@@ -74,9 +75,9 @@ PanelWindow {
         Rectangle {
             anchors.fill: parent
             radius: Theme.rPanel
-            color: Theme.alpha(Theme.bgDeep, 0.9)
+            color: Theme.flat ? Theme.panelFill : Theme.alpha(Theme.bgDeep, 0.9)
             border.width: 1
-            border.color: Theme.alpha(root.tint, 0.3)
+            border.color: Theme.flat ? Theme.panelBorder : Theme.alpha(root.tint, 0.3)
         }
 
         Text {

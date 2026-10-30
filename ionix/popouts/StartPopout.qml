@@ -25,11 +25,14 @@ Popout {
     id: root
 
     panelWidth: Config.start.width
-    padding: Theme.sp5
+    padding: root.sectionsLayout ? Theme.sp7 : Theme.sp5
+    screenAlign: Config.start.align ?? ""
     // A project being renamed, or an app's form, takes Escape to cancel the edit.
     holdEscape: root.renaming !== "" || root.appEditing > 0
 
     // ── State ───────────────────────────────────────────────────────────────
+
+    readonly property bool sectionsLayout: Config.start.layout === "sections"
 
     property string query: ""
     // home | all | settings | projects | project-apps — which face the body shows when nothing is typed. A
@@ -326,6 +329,14 @@ Popout {
                     subtitle: "Overlay with live window previews"
                 },
                 {
+                    section: "taskView",
+                    key: "enabled",
+                    module: "TaskViewButton",
+                    glyph: Icons.grid,
+                    title: "Task View",
+                    subtitle: "Every window and workspace; also Super+Tab"
+                },
+                {
                     section: "windowSwitcher",
                     key: "currentWorkspaceOnly",
                     glyph: Icons.dockWindow,
@@ -366,7 +377,7 @@ Popout {
     // ── Geometry ────────────────────────────────────────────────────────────
 
     // Everything outside the body — search, chips, dividers, footer, padding.
-    readonly property int chromeHeight: 190
+    readonly property int chromeHeight: root.sectionsLayout ? 180 : 190
 
     readonly property int maxBodyHeight: Math.max(240, Math.round((root.screen?.height ?? 1080) * Config.start.maxHeightFraction) - root.chromeHeight)
     readonly property int bodyHeight: Math.max(80, Math.min(bodyLoader.height, root.maxBodyHeight))
@@ -557,6 +568,52 @@ Popout {
         return items;
     }
 
+    // In this layout power actions are a menu off the button rather than a strip, and
+    // ask nothing further: the menu is the second click.
+    function openPowerMenu(anchor) {
+        const at = anchor.mapToItem(tileMenu, 0, 0);
+        const items = [
+            {
+                text: "Lock",
+                glyph: Icons.lock,
+                trigger: () => root.run(() => Launch.run(Config.power.lock))
+            },
+            {
+                text: "Sign out",
+                glyph: Icons.logout,
+                trigger: () => root.run(() => Launch.run(Config.power.logout))
+            },
+            {
+                separator: true
+            },
+            {
+                text: "Sleep",
+                glyph: Icons.suspend,
+                trigger: () => root.run(() => Launch.run(Config.power.suspend))
+            },
+            {
+                text: "Hibernate",
+                glyph: Icons.hibernate,
+                trigger: () => root.run(() => Launch.run(Config.power.hibernate))
+            },
+            {
+                text: "Shut down",
+                glyph: Icons.shutdown,
+                trigger: () => root.run(() => Launch.run(Config.power.shutdown))
+            },
+            {
+                text: "Restart",
+                glyph: Icons.reboot,
+                trigger: () => root.run(() => Launch.run(Config.power.reboot))
+            }
+        ];
+        tileMenu.originX = at.x - 160;
+        tileMenu.originY = at.y - 260;
+        tileMenu.model = items;
+        tileMenu.headerText = "";
+        root.menuOpen = true;
+    }
+
     function saveProject(name) {
         const trimmed = (name ?? "").trim();
         if (trimmed === "")
@@ -682,11 +739,12 @@ Popout {
         // ── Search ──────────────────────────────────────────────────────────
         Rectangle {
             width: parent.width
-            height: 42
-            radius: Theme.rPill
-            color: Theme.alpha(Theme.bgDeep, 0.6)
+            height: root.sectionsLayout ? 36 : 42
+            // In this layout the one field is a full pill with a neutral stroke.
+            radius: root.sectionsLayout ? height / 2 : Theme.rPill
+            color: Theme.fieldFill
             border.width: 1
-            border.color: searchInput.activeFocus ? Theme.accentBright : Theme.border
+            border.color: root.sectionsLayout ? Theme.controlStroke : (searchInput.activeFocus ? Theme.accentBright : Theme.border)
 
             Behavior on border.color {
                 ColorAnimation {
@@ -702,7 +760,7 @@ Popout {
                 text: Icons.search
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fsIcon
-                color: searchInput.activeFocus ? Theme.accentBright : Theme.muted
+                color: searchInput.activeFocus && !root.sectionsLayout ? Theme.accentBright : Theme.muted
             }
 
             TextInput {
@@ -734,7 +792,7 @@ Popout {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     visible: searchInput.text === ""
-                    text: "Search apps, windows, settings and themes"
+                    text: root.sectionsLayout ? "Search for apps, settings, and windows" : "Search apps, windows, settings and themes"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fsBase
                     color: Theme.muted
@@ -863,7 +921,7 @@ Popout {
                             return projectsView;
                         if (root.mode === "project-apps")
                             return projectAppsView;
-                        return homeView;
+                        return root.sectionsLayout ? sectionsHomeView : homeView;
                     }
                 }
             }
@@ -884,6 +942,7 @@ Popout {
         Rectangle {
             width: parent.width
             height: 1
+            visible: !root.sectionsLayout
             color: Theme.divider
         }
 
@@ -893,7 +952,7 @@ Popout {
         // time, so opening that one would close this one.
         Item {
             width: parent.width
-            height: root.powerOpen ? 58 : 0
+            height: root.powerOpen && !root.sectionsLayout ? 58 : 0
             visible: height > 0
             clip: true
 
@@ -1142,8 +1201,30 @@ Popout {
 
         // ── Footer ──────────────────────────────────────────────────────────
         Item {
+            id: footerRow
             width: parent.width
             height: 36
+
+            // In this layout the footer is a strip of its own, edge to edge with the panel's
+            // bottom corners. Inside this Item so it does not count toward the
+            // height GlassPanel measures.
+            Rectangle {
+                visible: root.sectionsLayout
+                x: -root.padding
+                y: -Theme.sp4
+                z: -1
+                width: root.panelWidth
+                height: parent.height + Theme.sp4 + root.padding
+                color: Theme.footerFill
+                bottomLeftRadius: Theme.rPanel
+                bottomRightRadius: Theme.rPanel
+
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: Theme.divider
+                }
+            }
 
             Item {
                 id: avatarSlot
@@ -1206,7 +1287,7 @@ Popout {
                 }
 
                 Text {
-                    visible: text !== ""
+                    visible: text !== "" && !root.sectionsLayout
                     text: {
                         const parts = [];
                         // With a real name in the title, the login moves down here
@@ -1232,6 +1313,8 @@ Popout {
 
                 IconButton {
                     anchors.verticalCenter: parent.verticalCenter
+                    // That home page has its own All button by the Pinned header.
+                    visible: !root.sectionsLayout
                     icon: root.view === "all" ? Icons.chevronLeft : Icons.grid
                     fontSize: Theme.fsIcon
                     active: root.view === "all"
@@ -1293,6 +1376,7 @@ Popout {
                 }
 
                 IconButton {
+                    id: powerButton
                     anchors.verticalCenter: parent.verticalCenter
                     icon: Icons.shutdown
                     fontSize: Theme.fsIcon
@@ -1301,6 +1385,10 @@ Popout {
                     hoverColour: Theme.red
                     tooltip: "Power"
                     onClicked: {
+                        if (root.sectionsLayout) {
+                            root.openPowerMenu(powerButton);
+                            return;
+                        }
                         root.powerOpen = !root.powerOpen;
                         root.armed = "";
                         if (root.powerOpen)
@@ -1330,6 +1418,247 @@ Popout {
     }
 
     // ── Views ───────────────────────────────────────────────────────────────
+
+    // The "sections" home page. Same data as the plain one below; the differences are
+    // the two section headers with a button at the far end, a tile without a frame and
+    // the two-column Recommended list.
+    Component {
+        id: sectionsHomeView
+
+        Column {
+            width: bodyLoader.width
+            spacing: Theme.sp3
+
+            Item {
+                width: parent.width
+                height: 32
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.sp5
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Pinned"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fsBase
+                    font.weight: Font.DemiBold
+                    color: Theme.textBright
+                }
+
+                SectionLinkButton {
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.sp5
+                    anchors.verticalCenter: parent.verticalCenter
+                    label: "All"
+                    glyph: Icons.chevronRight
+                    onClicked: root.view = "all"
+                }
+            }
+
+            // Three rows whether or not they are full: the menu keeps its
+            // size and the footer stays put as pins come and go.
+            Grid {
+                width: parent.width
+                columns: Config.start.columns
+                height: Math.max(implicitHeight, 3 * (Config.start.iconSize + Theme.sp5 * 2 + 26))
+
+                Repeater {
+                    model: root.pinnedEntries
+
+                    delegate: AppTile {
+                        id: sectionPin
+                        required property var modelData
+
+                        width: Math.floor(root.contentWidth / Config.start.columns)
+                        iconSize: Config.start.iconSize
+                        iconSource: Apps.iconSource(sectionPin.modelData)
+                        label: sectionPin.modelData.name
+                        running: false
+
+                        onClicked: root.launch(sectionPin.modelData)
+                        onRightClicked: root.openMenu(sectionPin.modelData, sectionPin)
+                    }
+                }
+            }
+
+            Item {
+                width: parent.width
+                height: 32
+                visible: root.showProjects
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.sp5
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Projects"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fsBase
+                    font.weight: Font.DemiBold
+                    color: Theme.textBright
+                }
+
+                SectionLinkButton {
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.sp5
+                    anchors.verticalCenter: parent.verticalCenter
+                    label: "All"
+                    glyph: Icons.chevronRight
+                    onClicked: root.view = "projects"
+                }
+            }
+
+            Column {
+                width: parent.width
+                spacing: 1
+                visible: root.showProjects
+
+                Repeater {
+                    model: root.showProjects ? root.homeProjects : []
+                    delegate: projectRow
+                }
+            }
+
+            Item {
+                width: parent.width
+                height: 32
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.sp5
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Recommended"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fsBase
+                    font.weight: Font.DemiBold
+                    color: Theme.textBright
+                }
+
+                SectionLinkButton {
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.sp5
+                    anchors.verticalCenter: parent.verticalCenter
+                    label: root.recommendMode === "recent" ? "Frequent" : "Recent"
+                    glyph: Icons.chevronRight
+                    onClicked: root.recommendMode = root.recommendMode === "recent" ? "frequent" : "recent"
+                }
+            }
+
+            Grid {
+                width: parent.width
+                columns: 2
+                height: Math.max(implicitHeight, 3 * 56)
+
+                Repeater {
+                    model: root.recommendedEntries.length > 0 ? root.recommendedEntries : root.pinnedEntries.slice(0, Config.start.recommendCount)
+
+                    delegate: Rectangle {
+                        id: recommended
+                        required property var modelData
+
+                        width: Math.floor(root.contentWidth / 2)
+                        height: 56
+                        radius: Theme.rSm
+                        color: recommendedMouse.pressed ? Theme.subtlePressed : (recommendedMouse.containsMouse ? Theme.subtleHover : "transparent")
+
+                        IconImage {
+                            id: recommendedIcon
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.sp4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 32
+                            height: 32
+                            source: Apps.iconSource(recommended.modelData)
+                            asynchronous: true
+                        }
+
+                        Column {
+                            anchors.left: recommendedIcon.right
+                            anchors.leftMargin: Theme.sp4
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.sp2
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Text {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: recommended.modelData.name
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fsSm
+                                color: Theme.textBright
+                            }
+
+                            Text {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: Apps.subtitleFor(recommended.modelData)
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fsSm
+                                color: Theme.muted
+                            }
+                        }
+
+                        MouseArea {
+                            id: recommendedMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: event => {
+                                if (event.button === Qt.RightButton)
+                                    root.openMenu(recommended.modelData, recommended);
+                                else
+                                    root.launch(recommended.modelData);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // A section header's button: a small control-filled rectangle, "All >".
+    component SectionLinkButton: Rectangle {
+        id: linkButton
+
+        property string label: ""
+        property string glyph: ""
+
+        signal clicked
+
+        width: linkRow.implicitWidth + Theme.sp4
+        height: 24
+        radius: Theme.rSm
+        color: linkMouse.pressed ? Theme.subtlePressed : (linkMouse.containsMouse ? Theme.subtleHover : Theme.controlFill)
+        border.width: 1
+        border.color: Theme.controlStroke
+
+        Row {
+            id: linkRow
+            anchors.centerIn: parent
+            spacing: Theme.sp2
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: linkButton.label
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsSm
+                color: Theme.textBright
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: linkButton.glyph
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsXs
+                color: Theme.textBright
+            }
+        }
+
+        MouseArea {
+            id: linkMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: linkButton.clicked()
+        }
+    }
 
     Component {
         id: homeView

@@ -64,11 +64,11 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: Theme.rPill
-        color: root.selected ? Theme.alpha(Theme.accentBright, 0.16) : (root.hovered ? Theme.alpha(Theme.hover, 0.5) : Theme.alpha(Theme.bgCard, 0.35))
+        color: root.selected ? (Theme.flat ? Theme.subtleHover : Theme.alpha(Theme.accentBright, 0.16)) : (root.hovered ? Theme.alpha(Theme.hover, 0.5) : Theme.alpha(Theme.bgCard, 0.35))
         border.width: root.selected ? 2 : 1
         // Urgent windows are preselected by the service; the orange border says
         // why this card, of all of them, is the one the highlight opened on.
-        border.color: root.selected ? Theme.accentBright : (root.urgent ? Theme.alpha(Theme.orange, 0.7) : Theme.pillBorder)
+        border.color: root.selected ? (Theme.flat ? Theme.textBright : Theme.accentBright) : (root.urgent ? Theme.alpha(Theme.orange, 0.7) : Theme.pillBorder)
 
         Behavior on color {
             ColorAnimation {

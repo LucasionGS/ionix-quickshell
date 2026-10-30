@@ -18,9 +18,9 @@ Item {
         id: bg
         anchors.fill: parent
         radius: height / 2
-        color: root.checked ? Theme.alpha(Theme.accentBright, 0.85) : Theme.alpha(Theme.bgDeep, 0.8)
+        color: root.checked ? (Theme.flat ? Theme.accentBright : Theme.alpha(Theme.accentBright, 0.85)) : (Theme.flat ? "transparent" : Theme.alpha(Theme.bgDeep, 0.8))
         border.width: 1
-        border.color: root.checked ? Theme.accentBright : Theme.border
+        border.color: root.checked ? Theme.accentBright : (Theme.flat ? Theme.muted : Theme.border)
         opacity: root.enabled ? 1 : 0.4
 
         Behavior on color {
@@ -37,12 +37,14 @@ Item {
 
     Rectangle {
         id: knob
-        width: parent.height - 6
+        // The flat thumb is smaller while off, and dark on the accent while on.
+        readonly property int inset: Theme.flat && !root.checked ? 5 : 4
+        width: parent.height - inset * 2
         height: width
         radius: width / 2
-        y: 3
-        x: root.checked ? parent.width - width - 3 : 3
-        color: root.checked ? Theme.textBright : Theme.muted
+        y: inset
+        x: root.checked ? parent.width - width - inset : inset
+        color: root.checked ? (Theme.flat ? Theme.onAccent : Theme.textBright) : (Theme.flat ? Theme.text : Theme.muted)
         scale: mouse.pressed ? 0.9 : 1.0
 
         Behavior on x {

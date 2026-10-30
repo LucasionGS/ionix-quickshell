@@ -12,7 +12,7 @@ Rectangle {
     property string iconSource: ""      // freedesktop icon name, wins over `icon`
     property string title: ""
     property string subtitle: ""
-    property color iconColour: Theme.accentLight
+    property color iconColour: Theme.flat ? Theme.textBright : Theme.accentLight
     property bool selected: false
     property bool busy: false
     // Trailing content (switches, badges, buttons).

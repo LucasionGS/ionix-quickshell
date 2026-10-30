@@ -20,6 +20,9 @@ Item {
     // username field only shows what the focused one holds.
     property bool input: true
 
+    // lock.layout "bare": no card; picture, name and field sit on the wallpaper.
+    readonly property bool bare: Config.lock.layout === "bare"
+
     readonly property string phase: LockState.unlocked ? "success" : LockState.phase
     readonly property color ringColour: {
         if (root.phase === "success")
@@ -84,6 +87,7 @@ Item {
     // Medium glass: this floats over the wallpaper, so it follows the drawer
     // convention rather than the bar's heavy fill.
     RectangularShadow {
+        visible: !root.bare
         anchors.fill: glass
         radius: glass.radius
         blur: 64
@@ -95,6 +99,7 @@ Item {
         id: glass
         anchors.fill: parent
         radius: Theme.rPanel + 6
+        visible: !root.bare
         color: Theme.alpha(Theme.bgWindow, 0.6)
         border.width: 1
         border.color: Theme.alpha(root.ringColour, root.phase === "idle" ? 0.25 : 0.55)
@@ -138,6 +143,8 @@ Item {
                 id: ring
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
+                // Without a card there is no ring at rest; it only appears to report a check.
+                visible: !root.bare || root.phase !== "idle" || LockState.fingerprintScanning
                 opacity: LockState.fingerprintScanning && root.phase === "idle" ? breathe.value : 1
 
                 property real angle: 0
@@ -223,7 +230,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 9
                 radius: Theme.rRound
-                color: Theme.alpha(Theme.accent, 0.25)
+                color: root.bare ? Theme.alpha(Theme.bgWindow, 0.8) : Theme.alpha(Theme.accent, 0.25)
 
                 Text {
                     anchors.centerIn: parent
@@ -231,7 +238,7 @@ Item {
                     text: Icons.account
                     font.family: Theme.fontFamily
                     font.pixelSize: 40
-                    color: Theme.accentLight
+                    color: root.bare ? Theme.textBright : Theme.accentLight
                 }
             }
 
@@ -381,9 +388,9 @@ Item {
         Rectangle {
             id: field
             width: parent.width
-            height: 48
-            radius: height / 2
-            color: Theme.alpha(Theme.bgDeep, 0.6)
+            height: root.bare ? 36 : 48
+            radius: root.bare ? Theme.rSm : height / 2
+            color: Theme.fieldFill
             border.width: 1
             border.color: {
                 if (root.phase === "failed")

@@ -27,6 +27,9 @@ import qs.services
 Item {
     id: surface
 
+    // lock.layout "bare": the clock stays put, high up, in plain sentence-case type.
+    readonly property bool bare: Config.lock.layout === "bare"
+
     // The output this is drawn on; only its name is used, to pick a wallpaper.
     property var screen: null
     // Whether this view takes the keyboard. Every lock surface is its own
@@ -175,10 +178,10 @@ Item {
         Column {
             id: clockBlock
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.horizontalCenterOffset: surface.awake ? 0 : content.wander.x
-            y: surface.awake ? Math.max(Theme.sp7, card.y - height - (surface.compact ? Theme.sp6 : content.height * 0.07)) : (content.height - height) / 2 + content.wander.y
+            anchors.horizontalCenterOffset: (surface.awake || surface.bare) ? 0 : content.wander.x
+            y: surface.bare ? content.height * 0.11 : (surface.awake ? Math.max(Theme.sp7, card.y - height - (surface.compact ? Theme.sp6 : content.height * 0.07)) : (content.height - height) / 2 + content.wander.y)
             spacing: 0
-            scale: surface.awake ? 1 : 1.18
+            scale: (surface.awake || surface.bare) ? 1 : 1.18
 
             Behavior on y {
                 NumberAnimation {
@@ -211,7 +214,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: clockBlock.timeSize
                 font.weight: Font.Light
-                font.letterSpacing: -clockBlock.timeSize * 0.03
+                font.letterSpacing: surface.bare ? 0 : -clockBlock.timeSize * 0.03
                 color: Theme.textBright
 
                 layer.enabled: true
@@ -225,12 +228,13 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: Qt.formatDateTime(clock.date, Config.lock.dateFormat ?? "dddd d MMMM").toUpperCase()
+                readonly property string date: Qt.formatDateTime(clock.date, Config.lock.dateFormat ?? "dddd d MMMM")
+                text: surface.bare ? date : date.toUpperCase()
                 font.family: Theme.fontFamily
-                font.pixelSize: Math.max(Theme.fsLg, Math.round(clockBlock.timeSize * 0.13))
-                font.weight: Font.DemiBold
-                font.letterSpacing: Math.max(2, clockBlock.timeSize * 0.035)
-                color: Theme.accentLight
+                font.pixelSize: surface.bare ? Math.round(clockBlock.timeSize * 0.2) : Math.max(Theme.fsLg, Math.round(clockBlock.timeSize * 0.13))
+                font.weight: surface.bare ? Font.Normal : Font.DemiBold
+                font.letterSpacing: surface.bare ? 0 : Math.max(2, clockBlock.timeSize * 0.035)
+                color: surface.bare ? Theme.textBright : Theme.accentLight
 
                 layer.enabled: true
                 layer.effect: MultiEffect {

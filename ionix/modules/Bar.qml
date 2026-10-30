@@ -69,6 +69,14 @@ PanelWindow {
         right: root.vertical ? (root.position === "right" ? root.gapEdge : 0) : root.gapEnds
     }
 
+    // A margin change does not reach a layer surface that is already mapped: it kept
+    // the defaults' 8px ends after the theme said 0, since theme.json is read after
+    // this window exists. Mapping it again is what makes the new gaps take.
+    onGapEndsChanged: {
+        root.visible = false;
+        Qt.callLater(() => root.visible = true);
+    }
+
     // Both are set unconditionally: a PanelWindow anchored to both ends of an axis
     // is stretched by the compositor and ignores the implicit size on that axis,
     // so only the docked one is ever read.
@@ -97,7 +105,9 @@ PanelWindow {
         anchors.fill: parent
         radius: Theme.rBar
         color: Theme.barFill
-        border.width: 1
+        // A flat bar has one hairline, along the edge it faces the desktop with, drawn
+        // by the highlight below.
+        border.width: Theme.flat ? 0 : 1
         border.color: Theme.barBorder
 
         Behavior on color {
@@ -112,9 +122,9 @@ PanelWindow {
         anchors.top: background.top
         anchors.left: background.left
         anchors.right: background.right
-        anchors.margins: 1
+        anchors.margins: Theme.flat ? 0 : 1
         height: 1
-        color: Qt.rgba(1, 1, 1, 0.03)
+        color: Theme.flat ? Theme.barBorder : Qt.rgba(1, 1, 1, 0.03)
     }
 
     // ── Sections ────────────────────────────────────────────────────────────
