@@ -43,7 +43,7 @@ Item {
 
         colour: {
             if (root.wiredUp || root.activeWifi)
-                return Theme.accentLight;
+                return Theme.flat ? Theme.textBright : Theme.accentLight;
             return Theme.muted;
         }
 

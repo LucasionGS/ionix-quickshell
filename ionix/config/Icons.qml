@@ -13,6 +13,7 @@ Singleton {
 
     // ── Static glyphs ───────────────────────────────────────────────────────
     readonly property string logo: ""
+    readonly property string tune: "󰘮"
     readonly property string bell: "󰂚"
     readonly property string bellDnd: "󰂛"
     readonly property string calendar: "󰃭"

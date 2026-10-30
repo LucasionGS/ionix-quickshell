@@ -86,6 +86,9 @@ Singleton {
                 layout: "",
                 // "" hangs the menu off its button, "center" centres it on the screen.
                 align: "",
+                // What `qs ipc call start toggle` (the bare Super key) brings up: ""
+                // is this menu, "appgrid" the all-apps overlay.
+                opens: "",
                 showRunning: true,
                 recommend: "frequent",   // frequent | recent
                 recommendCount: 8,
@@ -147,6 +150,9 @@ Singleton {
                 format: "HH:mm",
                 dateFormat: "ddd d MMM",
                 showDate: true,
+                // ClockCluster: date and time on one line, and whether the bell is there.
+                inline: false,
+                bell: true,
                 // A vertical bar is ~46px wide, which "HH:mm" at the bar font does
                 // not fit into, so the vertical layout gets its own formats and
                 // stacks the parts with an embedded newline. Qt.formatDateTime
@@ -296,6 +302,30 @@ Singleton {
                 // workspace.
                 showProjectLabels: true
             },
+            dock: {
+                // The floating app dock, osd/DockWindow.qml, on any theme.
+                enabled: false,
+                position: "bottom",      // bottom | left | right | top
+                iconSize: 48,
+                // How much bigger the icon under the pointer gets. 1 is off.
+                magnification: 1.6,
+                // Gap to the screen edge, and the plate's corners.
+                margin: 6,
+                radius: 18,
+                // Hide it until the pointer reaches the edge. Windows then take the room.
+                autoHide: false,
+                // The shell's own items before the apps: appgrid, taskview.
+                leading: ["appgrid", "taskview"],
+                // After the apps, past a divider: { title, icon, glyph, command }.
+                trailing: []
+            },
+            appGrid: {
+                // The all-apps overlay, osd/AppGridOverlay.qml.
+                enabled: true,
+                columns: 7,
+                rows: 5,
+                iconSize: 72
+            },
             taskView: {
                 enabled: true,
                 // A lone window's thumbnail stops growing here.
@@ -305,6 +335,10 @@ Singleton {
                 // "" is the password card under the clock. "bare" puts the picture,
                 // name and field on the wallpaper, with the clock fixed near the top.
                 layout: "",
+                // "" centres the password card, "bottom" sets it along the foot of the
+                // screen. dateFirst prints the date over the clock instead of under it.
+                cardAlign: "",
+                dateFirst: false,
                 // The lock screen is its own process (lock.qml, started by
                 // `ionix-lock`), so a bar crash never takes the lock down with it.
                 // It reads this same merged config, so it wears the active theme
@@ -420,6 +454,8 @@ Singleton {
     readonly property var osd: data.osd
     readonly property var windowSwitcher: data.windowSwitcher
     readonly property var taskView: data.taskView
+    readonly property var dock: data.dock
+    readonly property var appGrid: data.appGrid
     readonly property var lock: data.lock
     readonly property var greeter: data.greeter
     readonly property var power: data.power
@@ -477,17 +513,23 @@ Singleton {
             return false;
         // These modules do the work of the plain ones they are listed against.
         const stands = ({
-                NetworkIndicator: "StatusCluster",
-                BluetoothIndicator: "StatusCluster",
-                HueIndicator: "StatusCluster"
-            })[name];
+                NetworkIndicator: ["StatusCluster", "QuickSettingsButton"],
+                BluetoothIndicator: ["StatusCluster", "QuickSettingsButton"],
+                HueIndicator: ["StatusCluster", "QuickSettingsButton"]
+            })[name] ?? [];
         for (const side of ["left", "center", "right"]) {
             if (!Array.isArray(m[side]))
                 continue;
-            if (m[side].indexOf(name) !== -1 || (stands && m[side].indexOf(stands) !== -1))
+            if ([name].concat(stands).some(module => m[side].indexOf(module) !== -1))
                 return true;
         }
         return false;
+    }
+
+    // Whether a theme's lists name this very module, with no stand-ins counted.
+    function listsModule(name) {
+        const m = root.data.modules;
+        return ["left", "center", "right"].some(side => Array.isArray(m?.[side]) && m[side].indexOf(name) !== -1);
     }
 
     function setSetting(section, key, value) {

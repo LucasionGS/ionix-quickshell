@@ -66,6 +66,20 @@ ShellRoot {
         delegate: TaskViewOverlay {}
     }
 
+    // The dock, where a theme or the user asks for one.
+    Variants {
+        model: Config.dock.enabled ? Quickshell.screens.filter(s => Config.wantsScreen(s.name)) : []
+
+        delegate: DockWindow {}
+    }
+
+    // The all-apps overlay. Unmapped until something opens it.
+    Variants {
+        model: Config.appGrid.enabled ? Quickshell.screens : []
+
+        delegate: AppGridOverlay {}
+    }
+
     // Optional user extension, loaded as-is when the file exists.
     Loader {
         source: userProbe.loaded ? `file://${Config.userDir}/user.qml` : ""
@@ -258,7 +272,10 @@ ShellRoot {
         target: "start"
 
         function toggle(): void {
-            Popouts.toggle("start", null);
+            if (Config.start.opens === "appgrid")
+                AppGrid.toggle();
+            else
+                Popouts.toggle("start", null);
         }
         function open(): void {
             Popouts.open("start", null);
@@ -346,6 +363,14 @@ ShellRoot {
         }
         function current(): string {
             return Projects.current;
+        }
+    }
+
+    IpcHandler {
+        target: "appgrid"
+
+        function toggle(): void {
+            AppGrid.toggle();
         }
     }
 

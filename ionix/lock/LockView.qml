@@ -29,6 +29,7 @@ Item {
 
     // lock.layout "bare": the clock stays put, high up, in plain sentence-case type.
     readonly property bool bare: Config.lock.layout === "bare"
+    readonly property bool dateFirst: Config.lock.dateFirst === true
 
     // The output this is drawn on; only its name is used, to pick a wallpaper.
     property var screen: null
@@ -204,6 +205,24 @@ Item {
 
             readonly property int timeSize: Math.round(Math.min(content.width * 0.2, content.height * (surface.compact ? 0.13 : 0.16), 150))
 
+            // lock.dateFirst: the date's line, moved above the clock.
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: surface.dateFirst
+                text: Qt.formatDateTime(clock.date, Config.lock.dateFormat ?? "dddd d MMMM")
+                font.family: Theme.fontFamily
+                font.pixelSize: Math.round(clockBlock.timeSize * 0.2)
+                color: Theme.textBright
+
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    shadowEnabled: true
+                    shadowColor: Qt.rgba(0, 0, 0, 0.85)
+                    shadowBlur: 0.7
+                    shadowVerticalOffset: 2
+                }
+            }
+
             Text {
                 id: time
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -228,6 +247,7 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
+                visible: !surface.dateFirst
                 readonly property string date: Qt.formatDateTime(clock.date, Config.lock.dateFormat ?? "dddd d MMMM")
                 text: surface.bare ? date : date.toUpperCase()
                 font.family: Theme.fontFamily
@@ -253,7 +273,7 @@ Item {
             width: Math.min(380, content.width - Theme.sp7 * 2)
             height: implicitHeight
             x: (content.width - width) / 2
-            y: (content.height - height) / 2 + content.height * 0.06 + (surface.awake ? 0 : Theme.sp7)
+            y: (Config.lock.cardAlign === "bottom" ? content.height - height - bottom.height - Theme.sp7 * 2 : (content.height - height) / 2 + content.height * 0.06) + (surface.awake ? 0 : Theme.sp7)
             opacity: surface.awake ? 1 : 0
             visible: opacity > 0
             scale: surface.awake ? 1 : 0.96

@@ -1,10 +1,7 @@
 // Pinned apps and running windows in one strip, one button per application rather
 // than per window. Taskbar is the plain alternative: running windows only, one each.
-//
-// A pinned app sits at its pin position whether or not it is open, and apps that
-// are running but not pinned follow in the order they were first seen. The pip
-// under a button says which state it is in: none for closed, a short grey one for
-// running, a longer accent one for the app holding focus.
+// The pip under a button says which state it is in: none for closed, a short grey one
+// for running, a longer accent one for the app holding focus.
 //
 // A click on a closed app starts it, on an open one raises it, and on the app
 // already focused moves on to its next window. Hovering shows a live thumbnail
@@ -23,48 +20,8 @@ Item {
 
     property var bar: null
 
-    readonly property var windows: Windows.forScreen(root.bar?.screen)
-
-    // The apps to draw, each { key, entry, title, iconSource, windows }. Windows
-    // whose app has no desktop entry are keyed by their app id instead.
-    readonly property var apps: {
-        const groups = [];
-        const byKey = ({});
-
-        for (const id of StartState.taskbarPins) {
-            const entry = Apps.byId(id);
-            if (!entry)
-                continue;
-            byKey[entry.id] = {
-                key: entry.id,
-                entry: entry,
-                title: entry.name,
-                iconSource: Apps.iconSource(entry),
-                windows: []
-            };
-            groups.push(byKey[entry.id]);
-        }
-
-        for (const toplevel of root.windows) {
-            const entry = Windows.entryFor(toplevel);
-            const key = entry?.id ?? Windows.appId(toplevel);
-            if (key === "")
-                continue;
-            if (!byKey[key]) {
-                const iconName = Windows.iconFor(toplevel);
-                byKey[key] = {
-                    key: key,
-                    entry: entry,
-                    title: entry?.name ?? key,
-                    iconSource: iconName === "" ? "" : Quickshell.iconPath(iconName, true),
-                    windows: []
-                };
-                groups.push(byKey[key]);
-            }
-            byKey[key].windows.push(toplevel);
-        }
-        return groups;
-    }
+    // The apps to draw; see AppGroups.
+    readonly property var apps: AppGroups.forScreen(root.bar?.screen)
 
     // Which button's preview is up. Held in one place so moving from one button to
     // the next swaps the preview rather than stacking two.
@@ -197,14 +154,14 @@ Item {
                         previewDelay.stop();
                         if (event.button === Qt.RightButton) {
                             // Model first: the menu measures itself as it opens.
-                            menu.model = root.menuFor(button.group);
+                            menu.model = AppGroups.menuFor(button.group, "taskbar");
                             button.menuOpen = !button.menuOpen;
                         }
                         else if (event.button === Qt.MiddleButton) {
-                            root.launch(button.group);
+                            AppGroups.launch(button.group);
                         }
                         else {
-                            root.activate(button.group);
+                            AppGroups.activate(button.group);
                         }
                     }
                 }
@@ -246,58 +203,5 @@ Item {
         id: previewLinger
         interval: 280
         onTriggered: root.previewKey = ""
-    }
-
-    function launch(group) {
-        if (group.entry)
-            Apps.launch(group.entry);
-    }
-
-    function activate(group) {
-        const windows = group.windows;
-        if (windows.length === 0) {
-            root.launch(group);
-            return;
-        }
-        const at = windows.findIndex(w => w.activated);
-        Windows.activate(windows[(at + 1) % windows.length]);
-    }
-
-    function menuFor(group) {
-        const items = [];
-        if (group.entry) {
-            for (const action of Apps.actionItems(group.entry)) {
-                items.push({
-                    text: action.text,
-                    icon: action.icon,
-                    trigger: action.trigger
-                });
-            }
-            if (items.length > 0) {
-                items.push({
-                    separator: true
-                });
-            }
-            items.push({
-                text: group.title,
-                glyph: Icons.openExternal,
-                trigger: () => root.launch(group)
-            }, {
-                text: StartState.isTaskbarPinned(group.entry.id) ? "Unpin from taskbar" : "Pin to taskbar",
-                glyph: StartState.isTaskbarPinned(group.entry.id) ? Icons.pinOff : Icons.pin,
-                trigger: () => StartState.toggleTaskbarPin(group.entry.id)
-            });
-        }
-        if (group.windows.length > 0) {
-            items.push({
-                text: group.windows.length === 1 ? "Close window" : `Close all ${group.windows.length} windows`,
-                glyph: Icons.close,
-                trigger: () => {
-                    for (const window of group.windows)
-                        Windows.close(window);
-                }
-            });
-        }
-        return items;
     }
 }

@@ -45,6 +45,7 @@ Singleton {
     readonly property color pillFill: c("pillFill", alpha(bgCard, 0.35))
     readonly property color pillBorder: c("pillBorder", alpha(border, 0.5))
     readonly property color barBorder: c("barBorder", alpha(accentBright, 0.18))
+    readonly property color dockFill: c("dockFill", barFill)
     readonly property color panelBorder: c("panelBorder", alpha(accentBright, 0.25))
     readonly property color divider: c("divider", alpha(border, 0.35))
 

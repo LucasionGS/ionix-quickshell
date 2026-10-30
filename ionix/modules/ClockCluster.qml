@@ -49,8 +49,8 @@ Item {
         Grid {
             id: row
             anchors.centerIn: parent
-            rows: root.vertical ? 3 : 1
-            columns: root.vertical ? 1 : 3
+            rows: root.vertical ? 4 : 1
+            columns: root.vertical ? 1 : 4
             horizontalItemAlignment: Grid.AlignHCenter
             verticalItemAlignment: Grid.AlignVCenter
             spacing: root.vertical ? Theme.sp2 : Theme.sp3
@@ -63,7 +63,17 @@ Item {
                 color: Countdown.ringing ? Theme.red : Theme.textBright
             }
 
+            Text {
+                visible: Config.clock.inline === true && !root.vertical
+                text: Qt.formatDateTime(clock.date, Config.clock.dateFormat) + "  " + Qt.formatDateTime(clock.date, Config.clock.format)
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fsBase
+                color: Theme.textBright
+            }
+
             Column {
+                visible: Config.clock.inline !== true || root.vertical
+
                 Text {
                     anchors.right: parent.right
                     horizontalAlignment: root.vertical ? Text.AlignHCenter : Text.AlignRight
@@ -85,6 +95,7 @@ Item {
 
             // The bell, with the unread count on it.
             Item {
+                visible: Config.clock.bell !== false
                 width: 20
                 height: 20
 

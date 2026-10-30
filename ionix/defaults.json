@@ -223,6 +223,27 @@
     "margin": 120
   },
 
+  "dock": {
+    "_comment": "The floating app dock (osd/DockWindow.qml), on any theme: pinned and running apps with the same pins as AppTaskbar. position is bottom, left, right or top. magnification is how much bigger the icon under the pointer gets, 1 for off. leading holds the shell's own items before the apps (appgrid, taskview); trailing holds more after a divider, each { title, icon, glyph, command }.",
+    "enabled": false,
+    "position": "bottom",
+    "iconSize": 48,
+    "magnification": 1.6,
+    "margin": 6,
+    "radius": 18,
+    "autoHide": false,
+    "leading": ["appgrid", "taskview"],
+    "trailing": []
+  },
+
+  "appGrid": {
+    "_comment": "Every installed app as pages of big icons over the desktop (osd/AppGridOverlay.qml), with a search field: from the dock, start.opens or `qs -c ionix ipc call appgrid toggle`.",
+    "enabled": true,
+    "columns": 7,
+    "rows": 5,
+    "iconSize": 72
+  },
+
   "taskView": {
     "_comment": "Every window of the current workspace as thumbnails over a strip of all workspaces, from the TaskViewButton module, Super+Tab or `qs -c ionix ipc call taskview toggle`. It keeps clear of the bar and takes its look from the theme. maxCardWidth caps a lone window's thumbnail, in pixels.",
     "enabled": true,
