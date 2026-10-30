@@ -24,10 +24,19 @@ Singleton {
         Compositor.workspace(id);
     }
 
+    // A desktop after the last one on this screen, so it lands at the end of the strip.
+    // The number must be free on every screen: focusing one that exists elsewhere jumps
+    // there instead of creating it here.
+    function newDesktop(desktops) {
+        const taken = Hyprland.workspaces.values.map(w => w.id);
+        let id = Math.max(0, ...desktops.map(d => d.id)) + 1;
+        while (taken.indexOf(id) !== -1)
+            id++;
+        root.goTo(id);
+    }
+
+    // Through this screen's desktops only, for the same reason.
     function step(delta) {
-        const current = Hyprland.focusedMonitor?.activeWorkspace?.id ?? 1;
-        const next = Math.max(1, current + delta);
-        if (next !== current)
-            root.goTo(next);
+        Compositor.workspaceRelative(delta);
     }
 }

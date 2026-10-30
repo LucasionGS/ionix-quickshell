@@ -30,6 +30,27 @@ PanelWindow {
     // The keyboard's card, an index into `windows`.
     property int selection: 0
 
+    // Changing workspace hands Hyprland's keyboard focus to a window there, past even
+    // an exclusive layer, and it stays there: Escape would reach that window instead.
+    // Letting go and asking again is what brings it back.
+    property bool regrabbing: false
+
+    onActiveIdChanged: {
+        if (root.showing) {
+            root.regrabbing = true;
+            regrab.restart();
+        }
+    }
+
+    Timer {
+        id: regrab
+        interval: 50
+        onTriggered: {
+            root.regrabbing = false;
+            Qt.callLater(() => keys.forceActiveFocus());
+        }
+    }
+
     // ── Layout ──────────────────────────────────────────────────────────────
     readonly property int edgeGap: Theme.sp7
     readonly property int cardGap: Theme.sp5
@@ -78,7 +99,7 @@ PanelWindow {
 
     WlrLayershell.namespace: "ionix-taskview"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: root.showing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: root.showing && !root.regrabbing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     visible: root.showing || fadeHold.running
     focusable: root.showing
@@ -388,13 +409,7 @@ PanelWindow {
                     id: newMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: {
-                        const taken = root.desktops.map(d => d.id);
-                        let id = 1;
-                        while (taken.indexOf(id) !== -1)
-                            id++;
-                        TaskView.goTo(id);
-                    }
+                    onClicked: TaskView.newDesktop(root.desktops)
                 }
             }
         }
