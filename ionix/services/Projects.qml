@@ -112,7 +112,7 @@ Singleton {
     function focusOrLoad(name) {
         const ws = root.workspaceFor(name);
         if (ws)
-            ws.activate();
+            Compositor.workspace(ws.id);
         else
             root.load(name);
     }
