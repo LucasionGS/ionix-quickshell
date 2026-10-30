@@ -244,6 +244,11 @@
     "iconSize": 72
   },
 
+  "shortcuts": {
+    "_comment": "Every global keyboard shortcut Hyprland has, read live from `hyprctl binds` (osd/ShortcutsOverlay.qml): from Super+F1, the start menu's keyboard button or `qs -c ionix ipc call shortcuts toggle`. A bind's text comes from its `description` option, written \"Section: what it does\"; binds with the same description share a row, and one with none is listed under Other.",
+    "enabled": true
+  },
+
   "taskView": {
     "_comment": "Every window of the current workspace as thumbnails over a strip of all workspaces, from the TaskViewButton module, Super+Tab or `qs -c ionix ipc call taskview toggle`. It keeps clear of the bar and takes its look from the theme. maxCardWidth caps a lone window's thumbnail, in pixels.",
     "enabled": true,

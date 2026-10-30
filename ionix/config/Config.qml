@@ -326,6 +326,10 @@ Singleton {
                 rows: 5,
                 iconSize: 72
             },
+            shortcuts: {
+                // The shortcut list, osd/ShortcutsOverlay.qml.
+                enabled: true
+            },
             taskView: {
                 enabled: true,
                 // A lone window's thumbnail stops growing here.
@@ -456,6 +460,7 @@ Singleton {
     readonly property var taskView: data.taskView
     readonly property var dock: data.dock
     readonly property var appGrid: data.appGrid
+    readonly property var shortcuts: data.shortcuts
     readonly property var lock: data.lock
     readonly property var greeter: data.greeter
     readonly property var power: data.power

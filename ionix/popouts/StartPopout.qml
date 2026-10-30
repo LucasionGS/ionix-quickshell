@@ -1381,6 +1381,19 @@ Popout {
 
                 IconButton {
                     anchors.verticalCenter: parent.verticalCenter
+                    visible: Config.shortcuts.enabled
+                    icon: Icons.keyboard
+                    fontSize: Theme.fsIcon
+                    colour: Theme.text
+                    tooltip: "Keyboard shortcuts"
+                    onClicked: {
+                        Popouts.close();
+                        Shortcuts.toggle();
+                    }
+                }
+
+                IconButton {
+                    anchors.verticalCenter: parent.verticalCenter
                     visible: Themes.available
                     icon: Icons.palette
                     fontSize: Theme.fsIcon

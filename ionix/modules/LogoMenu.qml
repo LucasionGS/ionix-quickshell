@@ -40,6 +40,11 @@ Item {
             trigger: () => AppGrid.toggle()
         },
         {
+            text: "Keyboard Shortcuts",
+            hint: "Super+F1",
+            trigger: () => Shortcuts.toggle()
+        },
+        {
             separator: true
         },
         {
