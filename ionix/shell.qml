@@ -46,6 +46,14 @@ ShellRoot {
         delegate: SwitcherOverlay {}
     }
 
+    // Task View. Stays unmapped until something opens it (TaskViewButton, or
+    // `qs ipc call taskview toggle`), so one per screen costs nothing otherwise.
+    Variants {
+        model: Quickshell.screens
+
+        delegate: TaskViewOverlay {}
+    }
+
     // Optional user extension, loaded as-is when the file exists.
     Loader {
         source: userProbe.loaded ? `file://${Config.userDir}/user.qml` : ""
@@ -326,6 +334,14 @@ ShellRoot {
         }
         function current(): string {
             return Projects.current;
+        }
+    }
+
+    IpcHandler {
+        target: "taskview"
+
+        function toggle(): void {
+            TaskView.toggle();
         }
     }
 

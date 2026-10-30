@@ -59,7 +59,7 @@ Singleton {
                 monitors: ["*"]
             },
             modules: {
-                left: ["Launcher", "Workspaces", "Taskbar"],
+                left: ["Launcher", "TaskViewButton", "Workspaces", "Taskbar"],
                 center: ["MediaWidget"],
                 right: ["Tray", "AudioIndicator", "NetworkIndicator", "BluetoothIndicator", "HueIndicator", "BatteryIndicator", "Clock", "NotificationBell"]
             },
@@ -69,7 +69,9 @@ Singleton {
                 // so Launcher renders it with Theme.fontLogo, not the bar font.
                 icon: "",
                 command: ["ioexplorer-spotlight"],
-                middleCommand: ["ioexplorer-spotlight"]
+                middleCommand: ["ioexplorer-spotlight"],
+                // Of the SearchBox module, on a horizontal bar.
+                searchWidth: 240
             },
             start: {
                 enabled: true,
@@ -78,6 +80,12 @@ Singleton {
                 maxHeightFraction: 0.72,
                 columns: 6,
                 iconSize: 40,
+                // "" is the home page with its Pinned, Running and Frequent sections;
+                // "sections" is Pinned and Recommended at a fixed height over a footer
+                // strip, identity on the left and shortcuts plus power on the right.
+                layout: "",
+                // "" hangs the menu off its button, "center" centres it on the screen.
+                align: "",
                 showRunning: true,
                 recommend: "frequent",   // frequent | recent
                 recommendCount: 8,
@@ -122,7 +130,10 @@ Singleton {
                 // false = every window on this monitor, whichever of its
                 // workspaces it lives on. Set true to track the visible one.
                 currentWorkspaceOnly: false,
-                iconOverrides: {}
+                iconOverrides: {},
+                // Seed for the AppTaskbar module's pinned apps, used until one
+                // is pinned or unpinned from it. Same form as start.defaultPins.
+                defaultPins: ["io.github.ionix.IoExplorer", "ionterm", "firefox", "code"]
             },
             media: {
                 backend: "mpris",        // mpris | off
@@ -285,7 +296,15 @@ Singleton {
                 // workspace.
                 showProjectLabels: true
             },
+            taskView: {
+                enabled: true,
+                // A lone window's thumbnail stops growing here.
+                maxCardWidth: 560
+            },
             lock: {
+                // "" is the password card under the clock. "bare" puts the picture,
+                // name and field on the wallpaper, with the clock fixed near the top.
+                layout: "",
                 // The lock screen is its own process (lock.qml, started by
                 // `ionix-lock`), so a bar crash never takes the lock down with it.
                 // It reads this same merged config, so it wears the active theme
@@ -400,6 +419,7 @@ Singleton {
     readonly property var notifications: data.notifications
     readonly property var osd: data.osd
     readonly property var windowSwitcher: data.windowSwitcher
+    readonly property var taskView: data.taskView
     readonly property var lock: data.lock
     readonly property var greeter: data.greeter
     readonly property var power: data.power
@@ -455,9 +475,18 @@ Singleton {
         const m = root.data.modules;
         if (!isPlainObject(m))
             return false;
-        for (const side of ["left", "center", "right"])
-            if (Array.isArray(m[side]) && m[side].indexOf(name) !== -1)
+        // These modules do the work of the plain ones they are listed against.
+        const stands = ({
+                NetworkIndicator: "StatusCluster",
+                BluetoothIndicator: "StatusCluster",
+                HueIndicator: "StatusCluster"
+            })[name];
+        for (const side of ["left", "center", "right"]) {
+            if (!Array.isArray(m[side]))
+                continue;
+            if (m[side].indexOf(name) !== -1 || (stands && m[side].indexOf(stands) !== -1))
                 return true;
+        }
         return false;
     }
 

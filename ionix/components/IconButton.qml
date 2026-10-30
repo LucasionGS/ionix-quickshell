@@ -48,7 +48,7 @@ Item {
         anchors.leftMargin: root.vertical ? 2 : 0
         anchors.rightMargin: root.vertical ? 2 : 0
         radius: Theme.rSm
-        color: root.hovered ? Theme.alpha(root.colour, 0.12) : "transparent"
+        color: root.hovered ? (Theme.flat ? Theme.subtleHover : Theme.alpha(root.colour, 0.12)) : "transparent"
 
         Behavior on color {
             ColorAnimation {
@@ -68,7 +68,7 @@ Item {
         horizontalItemAlignment: Grid.AlignHCenter
         verticalItemAlignment: Grid.AlignVCenter
         spacing: root.label !== "" && root.icon !== "" ? Theme.sp2 : 0
-        scale: root.hovered ? 1.08 : 1.0
+        scale: root.hovered ? Theme.hoverScale : 1.0
 
         Behavior on scale {
             NumberAnimation {

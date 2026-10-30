@@ -13,8 +13,8 @@ Item {
     property real step: 0.05
     property bool enabled: true
     property color fillColour: Theme.accentBright
-    property int trackHeight: 6
-    property int knobSize: 15
+    property int trackHeight: Theme.flat ? 4 : 6
+    property int knobSize: Theme.flat ? 20 : 15
 
     // When set, the track is painted with this gradient and the fill bar is
     // hidden — for pickers where the whole range is meaningful (a hue rainbow, a
@@ -40,9 +40,9 @@ Item {
         width: root._usable
         height: root.trackHeight
         radius: height / 2
-        color: Theme.alpha(Theme.bgDeep, 0.75)
+        color: Theme.flat ? Theme.muted : Theme.alpha(Theme.bgDeep, 0.75)
         gradient: root.trackGradient
-        border.width: 1
+        border.width: Theme.flat ? 0 : 1
         border.color: Theme.alpha(Theme.border, 0.5)
         opacity: root.enabled ? 1 : 0.45
 
@@ -69,10 +69,12 @@ Item {
         width: root.knobSize
         height: root.knobSize
         radius: width / 2
-        color: root.enabled ? Theme.textBright : Theme.muted
-        border.width: 2
-        border.color: root.enabled ? root.fillColour : Theme.border
-        scale: mouse.pressed ? 1.2 : (mouse.containsMouse ? 1.1 : 1.0)
+        // The flat thumb is a disc with an accent dot that changes under the pointer;
+        // the disc itself never moves in size.
+        color: Theme.flat ? Theme.bgCard : (root.enabled ? Theme.textBright : Theme.muted)
+        border.width: Theme.flat ? 1 : 2
+        border.color: Theme.flat ? Theme.controlStroke : (root.enabled ? root.fillColour : Theme.border)
+        scale: Theme.flat ? 1.0 : (mouse.pressed ? 1.2 : (mouse.containsMouse ? 1.1 : 1.0))
 
         Behavior on scale {
             NumberAnimation {
@@ -83,6 +85,22 @@ Item {
 
         // Glow, brightest while dragging.
         Rectangle {
+            visible: Theme.flat
+            anchors.centerIn: parent
+            width: mouse.pressed ? 8 : (mouse.containsMouse ? 14 : 12)
+            height: width
+            radius: width / 2
+            color: root.enabled ? root.fillColour : Theme.border
+
+            Behavior on width {
+                NumberAnimation {
+                    duration: Theme.durFast
+                }
+            }
+        }
+
+        Rectangle {
+            visible: !Theme.flat
             anchors.centerIn: parent
             width: parent.width + 8
             height: parent.height + 8

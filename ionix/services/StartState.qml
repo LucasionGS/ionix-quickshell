@@ -42,6 +42,28 @@ Singleton {
 
     readonly property var usage: root.data.usage ?? ({})
 
+    // The apps kept on AppTaskbar, seeded and stored like pins but its own
+    // list: what you pin to Start is not what you pin to the taskbar.
+    readonly property var taskbarPins: (root.data.taskbarPins === null || root.data.taskbarPins === undefined) ? (Config.taskbar.defaultPins ?? []) : root.data.taskbarPins
+
+    function isTaskbarPinned(id) {
+        return root.taskbarPins.indexOf(id) !== -1;
+    }
+
+    function toggleTaskbarPin(id) {
+        if (!id || id === "")
+            return;
+        const next = root.taskbarPins.slice();
+        const at = next.indexOf(id);
+        if (at === -1)
+            next.push(id);
+        else
+            next.splice(at, 1);
+        root.replace({
+            taskbarPins: next
+        });
+    }
+
     // ── Pins ────────────────────────────────────────────────────────────────
 
     function isPinned(id) {

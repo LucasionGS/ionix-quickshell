@@ -143,7 +143,7 @@ PopupWindow {
         id: panel
         width: root.menuWidth
         padding: root.menuPadding
-        radius: Theme.rPill
+        radius: Theme.flat ? Theme.rPanel : Theme.rPill
 
         opacity: root.shouldOpen ? 1 : 0
         scale: root.shouldOpen ? 1 : 0.96
@@ -264,7 +264,7 @@ PopupWindow {
                             visible: !entryRow.isSeparator
                             anchors.fill: parent
                             radius: Theme.rSm
-                            color: (entryRow.actionable && rowMouse.containsMouse) ? Theme.alpha(entryRow.modelData.danger === true ? Theme.red : Theme.hover, 0.7) : "transparent"
+                            color: (entryRow.actionable && rowMouse.containsMouse) ? (Theme.flat ? Theme.subtleHover : Theme.alpha(entryRow.modelData.danger === true ? Theme.red : Theme.hover, 0.7)) : "transparent"
 
                             Behavior on color {
                                 ColorAnimation {

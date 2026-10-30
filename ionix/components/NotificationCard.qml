@@ -35,12 +35,15 @@ Rectangle {
 
     radius: Theme.rPill
     color: {
+        // A toast is panel material; in a list it is a card on the panel.
+        if (Theme.flat)
+            return root.elevated ? Theme.panelFill : (root.hovered ? Theme.subtleHover : Theme.controlFill);
         if (root.elevated)
             return root.hovered ? Theme.alpha(Theme.hover, 0.96) : Theme.alpha(Theme.bgWindow, 0.94);
         return root.hovered ? Theme.alpha(Theme.hover, 0.55) : Theme.alpha(Theme.bgCard, 0.35);
     }
     border.width: 1
-    border.color: root.notification.urgency === NotificationUrgency.Critical ? Theme.alpha(Theme.red, 0.55) : Theme.alpha(Theme.border, 0.45)
+    border.color: Theme.flat ? Theme.panelBorder : (root.notification.urgency === NotificationUrgency.Critical ? Theme.alpha(Theme.red, 0.55) : Theme.alpha(Theme.border, 0.45))
     clip: true
 
     Behavior on color {
@@ -56,6 +59,8 @@ Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: 3
+        // Flat toasts carry no stripe; only a critical one is marked at all.
+        visible: !Theme.flat || root.notification.urgency === NotificationUrgency.Critical
         color: root.accent
         opacity: root.notification.urgency === NotificationUrgency.Normal ? 0.5 : 1
     }
@@ -109,7 +114,7 @@ Rectangle {
                 text: Icons.bell
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fsIcon
-                color: root.accent
+                color: Theme.flat ? Theme.textBright : root.accent
             }
         }
 
@@ -134,8 +139,8 @@ Rectangle {
                     text: root.notification.appName !== "" ? root.notification.appName : "Notification"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fsXs
-                    font.weight: Font.DemiBold
-                    color: root.accent
+                    font.weight: Theme.flat ? Font.Normal : Font.DemiBold
+                    color: Theme.flat ? Theme.muted : root.accent
                     elide: Text.ElideRight
                 }
 
@@ -257,7 +262,7 @@ Rectangle {
         id: life
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        visible: root.showLife
+        visible: root.showLife && !Theme.flat
         height: 2
         color: root.accent
         opacity: 0.7

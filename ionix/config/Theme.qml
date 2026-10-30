@@ -35,20 +35,45 @@ Singleton {
     // ── Derived surfaces ────────────────────────────────────────────────────
     // Glass convention (CLAUDE.md): heavy for bars, medium for drawers, light for
     // tooltips. Always tinted with the deep backgrounds rather than solid fills.
-    readonly property color barFill: alpha(bgDeep, Config.bar.opacity)
-    readonly property color panelFill: alpha(bgWindow, 0.88)
-    readonly property color tooltipFill: alpha(bgDeep, 0.94)
-    readonly property color pillFill: alpha(bgCard, 0.35)
-    readonly property color pillBorder: alpha(border, 0.5)
-    readonly property color barBorder: alpha(accentBright, 0.18)
-    readonly property color panelBorder: alpha(accentBright, 0.25)
-    readonly property color divider: alpha(border, 0.35)
+    //
+    // A theme may state any of these outright, as #AARRGGBB, when its design
+    // language does not derive them the way the glass convention does, such as
+    // neutral strokes rather than ones tinted with the accent.
+    readonly property color barFill: c("barFill", alpha(bgDeep, Config.bar.opacity))
+    readonly property color panelFill: c("panelFill", alpha(bgWindow, 0.88))
+    readonly property color tooltipFill: c("tooltipFill", alpha(bgDeep, 0.94))
+    readonly property color pillFill: c("pillFill", alpha(bgCard, 0.35))
+    readonly property color pillBorder: c("pillBorder", alpha(border, 0.5))
+    readonly property color barBorder: c("barBorder", alpha(accentBright, 0.18))
+    readonly property color panelBorder: c("panelBorder", alpha(accentBright, 0.25))
+    readonly property color divider: c("divider", alpha(border, 0.35))
+
+    // ── Design language ─────────────────────────────────────────────────────
+    // Independent choices, so a theme takes what suits it.
+    //
+    // flat: controls that change colour rather than size, neutral strokes and hover
+    // fills instead of accent-tinted ones, thin sliders and hollow switches.
+    readonly property bool flat: Config.theme.flat === true
+    // Gap between a panel and the bar and screen edge it opens from. 0 is the shell's
+    // own placement: panels touch the bar and slide only as far as the screen needs.
+    readonly property int flyoutGap: n("flyoutGap", 0)
+    // Control surfaces: pointer-over and pressed fills, resting fill and stroke, a
+    // text field's fill, and the strip along the bottom of a panel.
+    readonly property color subtleHover: c("subtleHover", alpha(hover, 0.5))
+    readonly property color subtlePressed: c("subtlePressed", alpha(hover, 0.35))
+    readonly property color controlFill: c("controlFill", alpha(bgCard, 0.5))
+    readonly property color controlStroke: c("controlStroke", alpha(border, 0.5))
+    readonly property color fieldFill: c("fieldFill", alpha(bgDeep, 0.6))
+    readonly property color footerFill: c("footerFill", alpha(bgDeep, 0.5))
+    // Behind a Close control under the pointer.
+    readonly property color closeHover: c("closeHover", red)
+    readonly property color onAccent: c("onAccent", bgDeep)
 
     // ── Geometry ────────────────────────────────────────────────────────────
-    readonly property int rSm: 8
-    readonly property int rPill: 12
+    readonly property int rSm: n("rSm", 8)
+    readonly property int rPill: n("rPill", 12)
     readonly property int rBar: Config.bar.radius
-    readonly property int rPanel: 18
+    readonly property int rPanel: n("rPanel", 18)
     readonly property int rRound: 999
 
     readonly property int sp1: 2
@@ -60,33 +85,35 @@ Singleton {
     readonly property int sp7: 28
 
     // Height of a pill sitting inside the bar, leaving a 6px inset top and bottom.
-    readonly property int pillHeight: Math.max(20, Config.bar.height - 12)
+    readonly property int pillHeight: n("pillHeight", Math.max(20, Config.bar.height - 12))
 
     // ── Typography ──────────────────────────────────────────────────────────
     readonly property string fontFamily: s("fontFamily", "JetBrainsMono Nerd Font")
     readonly property string fontMono: s("fontMono", "JetBrainsMono Nerd Font")
     readonly property string fontLogo: s("fontLogo", "Ionix")
 
-    readonly property int fsXs: 9
-    readonly property int fsSm: 11
-    readonly property int fsMd: 12
-    readonly property int fsBase: 13
-    readonly property int fsLg: 14
-    readonly property int fsXl: 16
-    readonly property int fsIcon: 16
-    readonly property int fsIconLg: 20
-    readonly property int fsTitle: 22
+    readonly property int fsXs: n("fsXs", 9)
+    readonly property int fsSm: n("fsSm", 11)
+    readonly property int fsMd: n("fsMd", 12)
+    readonly property int fsBase: n("fsBase", 13)
+    readonly property int fsLg: n("fsLg", 14)
+    readonly property int fsXl: n("fsXl", 16)
+    readonly property int fsIcon: n("fsIcon", 16)
+    readonly property int fsIconLg: n("fsIconLg", 20)
+    readonly property int fsTitle: n("fsTitle", 22)
 
     // ── Motion ──────────────────────────────────────────────────────────────
     // Nothing in the shell animates for longer than durSlow. Hover uses OutBack for
     // a slight overshoot; anything that moves layout uses OutCubic so it settles.
-    readonly property int durFast: 120
-    readonly property int durNormal: 160
-    readonly property int durSlide: 220
-    readonly property int durSlow: 260
+    readonly property int durFast: n("durFast", 120)
+    readonly property int durNormal: n("durNormal", 160)
+    readonly property int durSlide: n("durSlide", 220)
+    readonly property int durSlow: n("durSlow", 260)
 
     readonly property int easeStandard: Easing.OutCubic
-    readonly property int easeOvershoot: Easing.OutBack
+    readonly property int easeOvershoot: flat ? Easing.OutCubic : Easing.OutBack
+    // How far a hovered glyph grows. Flat controls change colour, never size.
+    readonly property real hoverScale: flat ? 1.0 : 1.08
     readonly property int easeIn: Easing.InCubic
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -115,6 +142,11 @@ Singleton {
     function c(key, fallback) {
         const v = Config.theme[key];
         return (v !== undefined && v !== null && v !== "") ? v : fallback;
+    }
+
+    function n(key, fallback) {
+        const v = Config.theme[key];
+        return typeof v === "number" ? v : fallback;
     }
 
     function s(key, fallback) {

@@ -95,7 +95,7 @@ PopupWindow {
         radius: Theme.rSm
         color: Theme.tooltipFill
         border.width: 1
-        border.color: Theme.alpha(Theme.accentBright, 0.22)
+        border.color: Theme.flat ? Theme.panelBorder : Theme.alpha(Theme.accentBright, 0.22)
 
         opacity: root.armed && root.shown ? 1 : 0
         // Slides out of the target, so the offset follows the side it is on.
