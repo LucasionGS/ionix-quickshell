@@ -6,6 +6,7 @@
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import qs.config
 import qs.modules
@@ -14,6 +15,17 @@ import qs.services
 
 ShellRoot {
     id: root
+
+    // Hyprland 0.57's focusedmon event gives the workspace's address, which
+    // Quickshell 0.3.2 looks up as a name: on a labeled workspace it finds none
+    // and clears the monitor's active workspace. Monitors re-read by address.
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name === "focusedmon")
+                Hyprland.refreshMonitors();
+        }
+    }
 
     // One bar per screen the config allows.
     Variants {

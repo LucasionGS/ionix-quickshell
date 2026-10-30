@@ -13,8 +13,9 @@ pragma Singleton
 // the Lua variant is the bare constructor expression. Passing a plain string
 // there fails with "expected a dispatcher".
 //
-// Prefer the typed API (HyprlandWorkspace.activate()) wherever one exists — it
-// works under both parsers with no branching at all.
+// Prefer the typed API wherever one exists — it works under both parsers with
+// no branching at all. HyprlandWorkspace.activate() is the exception, see
+// workspace() below.
 
 import QtQuick
 import Quickshell
@@ -29,9 +30,10 @@ Singleton {
     }
 
     function workspace(id) {
-        // Typed call: no parser branch, and it targets the workspace object
-        // directly rather than re-resolving the ID.
-        const ws = Hyprland.workspaces.values.find(w => w.id === id);
+        // activate() focuses the workspace's *name*. Since Hyprland 0.57 a label
+        // is only a display name, so on a labeled workspace that opened a new
+        // empty workspace called the same. Only one with no number needs it.
+        const ws = id > 0 ? null : Hyprland.workspaces.values.find(w => w.id === id);
         if (ws)
             ws.activate();
         else
