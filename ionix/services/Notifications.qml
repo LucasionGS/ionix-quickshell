@@ -73,6 +73,9 @@ Singleton {
             arrivals[notification.id] = Date.now();
             root.arrivals = arrivals;
 
+            if (!root.dnd)
+                Quickshell.execDetached(["sh", "-c", "command -v ionix-sounds >/dev/null && exec ionix-sounds play notification 2>/dev/null"]);
+
             if (root.dnd || Config.notifications.popups === false)
                 return;
             // `transient` means "toast only, don't keep it around", but it still

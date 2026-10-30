@@ -56,10 +56,16 @@ pid=$!
 # 8s: a cold start on a slow disk with four monitors has been seen near 2s.
 for _ in $(seq 80); do
     if [[ "$(cat "$state" 2>/dev/null)" == locked* ]]; then
+        # The session-start lock is the login prompt, not something locking.
+        [[ -n "${IONIX_LOCK_SILENT:-}" ]] || ionix-sounds play lock &>/dev/null &
         wait "$pid"
         # lock.qml ends itself with SIGTERM once it has released the lock, so
         # the exit status says nothing; the state file does.
-        [[ "$(cat "$state" 2>/dev/null)" == unlocked* ]] && exit 0
+        if [[ "$(cat "$state" 2>/dev/null)" == unlocked* ]]; then
+            ionix-sounds play unlock &>/dev/null &
+            disown
+            exit 0
+        fi
         # Died while locked. The compositor keeps the session locked; take it
         # over rather than leave the user at its fallback screen.
         fallback "the lock screen exited while locked"
