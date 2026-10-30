@@ -28,7 +28,12 @@ Item {
     readonly property bool charging: root.device?.state === UPowerDeviceState.Charging || root.device?.state === UPowerDeviceState.FullyCharged
     readonly property bool critical: root.percent <= Config.battery.criticalAt && !root.charging
 
-    readonly property color stateColour: root.charging ? Theme.green : Theme.levelColour(root.percent / 100)
+    // A flat theme keeps it plain until there is something to warn about.
+    readonly property color stateColour: {
+        if (Theme.flat && root.percent > Config.battery.warnAt)
+            return Theme.textBright;
+        return root.charging ? Theme.green : Theme.levelColour(root.percent / 100);
+    }
 
     visible: root.present
     implicitWidth: button.implicitWidth

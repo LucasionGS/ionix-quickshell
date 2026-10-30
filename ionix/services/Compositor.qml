@@ -53,6 +53,30 @@ Singleton {
         root.dispatch(`renameworkspace ${id} ${name}`, `hl.dsp.workspace.rename({ workspace = ${id}, name = ${JSON.stringify(name)} })`);
     }
 
+    // Parks the focused window out of sight, and brings it back from there. The Lua
+    // config defines the toggle; hyprctl eval is how to reach it.
+    function minimizeActive() {
+        if (Hyprland.usingLua)
+            Quickshell.execDetached(["hyprctl", "eval", "ionix_bars_toggle_minimize()"]);
+        else
+            root.dispatch("movetoworkspacesilent special", "");
+    }
+
+    // A window parked by minimizeActive, back onto the workspace in view on its monitor,
+    // and focused. One Lua chunk so the two steps cannot swap: focus reaching the window
+    // while it is still parked opens the special workspace and leaves it open.
+    function restoreWindow(toplevel) {
+        const id = toplevel.monitor?.activeWorkspace?.id ?? Hyprland.focusedMonitor?.activeWorkspace?.id ?? 1;
+        const address = `address:0x${toplevel.address}`;
+        if (Hyprland.usingLua) {
+            Quickshell.execDetached(["hyprctl", "eval", `hl.dispatch(hl.dsp.window.move({ window = "${address}", workspace = ${id}, follow = false })); hl.dispatch(hl.dsp.focus({ window = "${address}" }))`]);
+        }
+        else {
+            Hyprland.dispatch(`movetoworkspacesilent ${id},${address}`);
+            Hyprland.dispatch(`focuswindow ${address}`);
+        }
+    }
+
     function toggleSpecial(name) {
         root.dispatch(`togglespecialworkspace ${name}`, `hl.dsp.workspace.toggle_special("${name}")`);
     }

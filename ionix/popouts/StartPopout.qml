@@ -192,6 +192,25 @@ Popout {
 
     readonly property var settingsGroups: [
         {
+            title: "Dock",
+            rows: [
+                {
+                    section: "dock",
+                    key: "enabled",
+                    glyph: Icons.dockBottom,
+                    title: "Dock",
+                    subtitle: "Pinned and running apps in a floating dock"
+                },
+                {
+                    section: "dock",
+                    key: "autoHide",
+                    glyph: Icons.dockBottom,
+                    title: "Hide the dock",
+                    subtitle: "Until the pointer reaches the screen edge"
+                }
+            ]
+        },
+        {
             title: "Bar",
             rows: [
                 {

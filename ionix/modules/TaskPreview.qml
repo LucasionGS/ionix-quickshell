@@ -1,5 +1,5 @@
-// The thumbnails over a taskbar button: one card per window of that app, with its
-// title and a close button, live for as long as the pointer stays.
+// The thumbnails over a taskbar or dock button: one card per window of that app, with
+// its title and a close button, live for as long as the pointer stays.
 //
 // Not a Popout: it must not take focus or a grab, or merely pointing at the bar
 // would close whatever flyout is open and steal the keyboard from the window you
@@ -19,6 +19,10 @@ PopupWindow {
     property Item anchorItem: null
     property bool shouldOpen: false
     property var windows: []
+    // Which way it opens, for a host that is not on the bar. -1 goes away from the bar.
+    property int edge: -1
+    // Further clear of the anchor, for one with something drawn past its bounds.
+    property int extraGap: 0
 
     signal entered
     signal exited
@@ -33,18 +37,22 @@ PopupWindow {
     anchor.item: root.anchorItem
     // Away from the bar, whichever edge it is on.
     readonly property int openEdge: {
+        if (root.edge !== -1)
+            return root.edge;
         if (Config.barVertical)
             return Config.barPopupEdge;
         return Config.bar.position === "bottom" ? Edges.Top : Edges.Bottom;
     }
-    readonly property int gap: Theme.flyoutGap > 0 ? Theme.flyoutGap : Theme.sp2
+    readonly property int gap: (Theme.flyoutGap > 0 ? Theme.flyoutGap : Theme.sp2) + root.extraGap
     anchor.edges: root.openEdge
     anchor.gravity: root.openEdge
-    anchor.adjustment: Config.barVertical ? PopupAdjustment.SlideY : PopupAdjustment.SlideX
-    anchor.margins.bottom: root.openEdge === Edges.Top ? root.gap : 0
-    anchor.margins.top: root.openEdge === Edges.Bottom ? root.gap : 0
-    anchor.margins.left: root.openEdge === Edges.Right ? root.gap : 0
-    anchor.margins.right: root.openEdge === Edges.Left ? root.gap : 0
+    anchor.adjustment: root.openEdge === Edges.Left || root.openEdge === Edges.Right ? PopupAdjustment.SlideY : PopupAdjustment.SlideX
+    // The rect rather than margins: a margin on the far side of the rect does not move
+    // the edge the panel hangs from, so an upward panel would ignore it.
+    anchor.rect.x: root.openEdge === Edges.Left ? -root.gap : (root.openEdge === Edges.Right ? root.gap : 0)
+    anchor.rect.y: root.openEdge === Edges.Top ? -root.gap : (root.openEdge === Edges.Bottom ? root.gap : 0)
+    anchor.rect.width: root.anchorItem?.width ?? 0
+    anchor.rect.height: root.anchorItem?.height ?? 0
 
     implicitWidth: row.implicitWidth + Theme.sp3 * 2
     implicitHeight: root.cardHeight + Theme.sp3 * 2

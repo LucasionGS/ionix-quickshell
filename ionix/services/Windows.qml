@@ -96,8 +96,19 @@ Singleton {
         return "";
     }
 
+    // Whether it was minimized: parked on the unnamed special workspace, which is where
+    // the title bar's button and Compositor.minimizeActive put it. A named one is a
+    // scratchpad somebody set up on purpose.
+    function isMinimized(toplevel) {
+        return toplevel?.workspace?.name === "special:special";
+    }
+
+    // Every route to a window comes through here, so a minimized one comes back rather
+    // than leaving you to open the special workspace to find it.
     function activate(toplevel) {
-        if (toplevel?.wayland)
+        if (root.isMinimized(toplevel))
+            Compositor.restoreWindow(toplevel);
+        else if (toplevel?.wayland)
             toplevel.wayland.activate();
     }
 

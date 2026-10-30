@@ -11,6 +11,7 @@
 //   glyph      icon-font character, drawn in the leading slot when there's no icon
 //   enabled    defaults to true
 //   danger     draw in the error colour, for destructive entries
+//   hint       text at the far end of the row, such as the entry's shortcut
 //   separator  a divider line; every other field is ignored
 //   trigger    function run on activation
 //
@@ -38,6 +39,11 @@ PopupWindow {
     // Optional title row identifying what the menu acts on.
     property string headerText: ""
     property string headerIcon: ""
+    // The menu's width never drops below this, for one that hangs off a small target.
+    property int minWidth: 180
+    // Surfaces that stay live while this is open, such as the bar a row of menu titles
+    // sits on: moving across those titles has to reach them.
+    property var grabWindows: []
 
     // Emitted when the menu should go away: an entry was activated, Escape was
     // pressed, or the focus grab was cleared.
@@ -56,8 +62,10 @@ PopupWindow {
     // instead of stepping in and out beside their icons.
     readonly property bool hasLeading: root.entries.some(e => !e.separator && (e.icon || e.glyph))
 
+    readonly property bool hasHints: root.entries.some(e => (e.hint ?? "") !== "")
+
     readonly property int contentWidth: root.menuWidth - root.menuPadding * 2
-    readonly property int menuWidth: Math.max(180, Math.min(420, measure.naturalWidth + root.menuPadding * 2))
+    readonly property int menuWidth: Math.max(root.minWidth, Math.min(420, measure.naturalWidth + root.menuPadding * 2))
     readonly property int maxHeight: Math.round((root.screen?.height ?? 1080) * 0.7)
 
     visible: root.shouldOpen
@@ -84,7 +92,7 @@ PopupWindow {
 
     HyprlandFocusGrab {
         active: root.shouldOpen
-        windows: [root]
+        windows: [root].concat(root.grabWindows)
         onCleared: root.dismissRequested()
     }
 
@@ -105,7 +113,7 @@ PopupWindow {
     Item {
         id: measure
 
-        readonly property int rowsWidth: labels.implicitWidth + (root.hasLeading ? root.leadingSize + Theme.sp3 : 0)
+        readonly property int rowsWidth: labels.implicitWidth + (root.hasLeading ? root.leadingSize + Theme.sp3 : 0) + (root.hasHints ? hints.implicitWidth + Theme.sp6 : 0)
         readonly property int headerWidth: root.hasHeader ? headerLabel.implicitWidth + root.headerIconSize + Theme.sp3 : 0
         readonly property int naturalWidth: Theme.sp3 * 2 + Math.max(measure.rowsWidth, measure.headerWidth)
 
@@ -124,6 +132,23 @@ PopupWindow {
 
                     visible: !modelData.separator
                     text: modelData.text ?? ""
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fsMd
+                }
+            }
+        }
+
+        Column {
+            id: hints
+
+            Repeater {
+                model: root.entries
+
+                delegate: Text {
+                    required property var modelData
+
+                    visible: (modelData.hint ?? "") !== ""
+                    text: modelData.hint ?? ""
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fsMd
                 }
@@ -304,7 +329,7 @@ PopupWindow {
                             visible: !entryRow.isSeparator
                             anchors.left: root.hasLeading ? leading.right : parent.left
                             anchors.leftMargin: Theme.sp3
-                            anchors.right: parent.right
+                            anchors.right: hintLabel.visible ? hintLabel.left : parent.right
                             anchors.rightMargin: Theme.sp3
                             anchors.verticalCenter: parent.verticalCenter
                             text: entryRow.modelData.text ?? ""
@@ -312,6 +337,18 @@ PopupWindow {
                             font.pixelSize: Theme.fsMd
                             color: entryRow.labelColour
                             elide: Text.ElideRight
+                        }
+
+                        Text {
+                            id: hintLabel
+                            visible: !entryRow.isSeparator && (entryRow.modelData.hint ?? "") !== ""
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.sp3
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: entryRow.modelData.hint ?? ""
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fsMd
+                            color: Theme.muted
                         }
 
                         MouseArea {
