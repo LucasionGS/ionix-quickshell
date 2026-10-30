@@ -80,6 +80,13 @@ ShellRoot {
         delegate: AppGridOverlay {}
     }
 
+    // The shortcut list. Unmapped until something opens it.
+    Variants {
+        model: Config.shortcuts.enabled ? Quickshell.screens : []
+
+        delegate: ShortcutsOverlay {}
+    }
+
     // Optional user extension, loaded as-is when the file exists.
     Loader {
         source: userProbe.loaded ? `file://${Config.userDir}/user.qml` : ""
@@ -371,6 +378,14 @@ ShellRoot {
 
         function toggle(): void {
             AppGrid.toggle();
+        }
+    }
+
+    IpcHandler {
+        target: "shortcuts"
+
+        function toggle(): void {
+            Shortcuts.toggle();
         }
     }
 

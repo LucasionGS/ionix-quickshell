@@ -48,6 +48,7 @@ Singleton {
     readonly property string chevronUp: "󰅃"
     readonly property string chevronDown: "󰅀"
     readonly property string settings: "󰒓"
+    readonly property string keyboard: "󰌌"
     readonly property string speaker: "󰓃"
     readonly property string microphone: "󰍬"
     readonly property string apps: "󰀻"
