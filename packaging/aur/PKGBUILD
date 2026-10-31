@@ -42,6 +42,7 @@ optdepends=(
     'nm-connection-editor: advanced network settings from the network popout'
     'hyprland: workspace, window and blur integration'
     'hyprlock: fallback when the Quickshell lock screen (ionix-lock) cannot lock'
+    'hypridle: lock the screen when idle (ionix-idle)'
     'qt6-multimedia-ffmpeg: video backgrounds on the lock screen'
     'fprintd: fingerprint unlock on the lock screen'
     'greetd: log in through ionix-greeter (the lock screen with a username field)'

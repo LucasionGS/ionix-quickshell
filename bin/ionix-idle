@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+###############################################
+# ionix-idle — lock the screen when idle      #
+###############################################
+#
+# hypridle does the watching, as the hypridle.service user unit. It cannot change
+# its timeout while running, so this writes the config it reads and restarts it
+# when that changed. The shell's settings page drives this, and it runs on every
+# shell start, so the setting is what decides whether the unit is enabled.
+#
+# The file lands where the unit's drop-in (hypridle.service.d/ionix.conf) adds to
+# hypridle's search path, behind ~/.config/hypr/hypridle.conf: a config of your
+# own still wins, and only the on/off here applies to it.
+
+IONIX_IDLE_VERSION="1.0.0"
+UNIT="hypridle.service"
+CONFIG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ionix/idle/hypr"
+GENERATED="$CONFIG_DIR/hypridle.conf"
+USER_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hypridle.conf"
+
+# Print usage
+usage() {
+  cat <<EOF
+Usage: ionix-idle <command>
+
+  on <MINUTES>  Lock the screen after this many minutes without input
+  off           Never lock on idle
+  status        Show whether it is on, and which config it uses
+  help          Show this help
+  version       Show the version
+
+Run "ionix-idle help <command>" for more information on a command.
+EOF
+}
+
+# Print usage for one command
+usage_command() {
+  case "$1" in
+    on)
+      cat <<EOF
+Lock the screen after this many minutes without input, and from now on at every login.
+
+Usage: ionix-idle on <MINUTES>
+EOF
+      ;;
+    off)
+      cat <<EOF
+Never lock on idle, and stop hypridle.
+
+Usage: ionix-idle off
+EOF
+      ;;
+    status)
+      cat <<EOF
+Print "on" or "off", then "own" if ~/.config/hypr/hypridle.conf is in charge of
+the timeout or "generated" if this command is. Exits with 1 if hypridle is not installed.
+
+Usage: ionix-idle status
+EOF
+      ;;
+    *)
+      usage
+      ;;
+  esac
+}
+
+# Whether the hypridle unit exists at all
+check_installed() {
+  systemctl --user cat "$UNIT" &>/dev/null
+}
+
+# Print hypridle's config for a timeout of $1 minutes.
+# The lock gets a scope of its own: stopping or restarting the unit kills its whole
+# cgroup, which would take a running lock screen with it and leave the session on
+# the compositor's crashed-lock page.
+render_config() {
+  cat <<EOF
+# Written by ionix-idle from the shell's settings; edits here are overwritten.
+# For a config of your own, use ~/.config/hypr/hypridle.conf instead.
+\$lock = systemd-run --user --scope --quiet ionix-lock
+
+general {
+  lock_cmd = \$lock
+}
+
+listener {
+  timeout = $(($1 * 60))
+  on-timeout = \$lock
+}
+EOF
+}
+
+# Turn it on
+cmd_on() {
+  local MINUTES="${1:-}" NEW
+  if [[ ! "$MINUTES" =~ ^[0-9]+$ ]] || (( MINUTES < 1 )); then
+    if [[ -z "$MINUTES" ]]; then
+      usage_command on
+    else
+      echo "Invalid idle time: $MINUTES. Must be a whole number of minutes, at least 1." >&2
+    fi
+    return 2
+  fi
+  if ! check_installed; then
+    echo "hypridle is not installed. Install the hypridle package to lock on idle." >&2
+    return 1
+  fi
+
+  NEW="$(render_config "$MINUTES")"
+  mkdir -p "$CONFIG_DIR"
+  systemctl --user is-enabled --quiet "$UNIT" || systemctl --user enable --quiet "$UNIT"
+  if [[ "$(cat "$GENERATED" 2>/dev/null)" == "$NEW" ]]; then
+    systemctl --user start "$UNIT"
+  else
+    printf '%s\n' "$NEW" > "$GENERATED"
+    systemctl --user restart "$UNIT"
+  fi
+}
+
+# Turn it off
+cmd_off() {
+  check_installed || return 0
+  systemctl --user disable --now --quiet "$UNIT"
+}
+
+# Say how it stands
+cmd_status() {
+  check_installed || return 1
+  if systemctl --user is-enabled --quiet "$UNIT"; then echo "on"; else echo "off"; fi
+  if [[ -e "$USER_CONFIG" ]]; then echo "own"; else echo "generated"; fi
+}
+
+case "${1:-help}" in
+  on)
+    cmd_on "${2:-}"
+    ;;
+  off)
+    cmd_off
+    ;;
+  status)
+    cmd_status
+    ;;
+  help|-h|--help)
+    if [[ -n "${2:-}" ]]; then usage_command "$2"; else usage; fi
+    ;;
+  version|-v|--version)
+    printf 'ionix-idle %s\n' "$IONIX_IDLE_VERSION"
+    ;;
+  *)
+    echo "Command not found: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

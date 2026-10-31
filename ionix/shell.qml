@@ -80,6 +80,10 @@ ShellRoot {
         delegate: AppGridOverlay {}
     }
 
+    // A singleton only starts when something names it, and the idle lock has to
+    // follow its setting from the shell's first moment.
+    readonly property bool idleLockFollowsSetting: Idle.enabled
+
     // The shortcut list. Unmapped until something opens it.
     Variants {
         model: Config.shortcuts.enabled ? Quickshell.screens : []
