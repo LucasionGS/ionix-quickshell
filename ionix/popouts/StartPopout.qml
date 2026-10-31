@@ -338,6 +338,36 @@ Popout {
             ]
         },
         {
+            title: "Lock screen",
+            rows: [
+                {
+                    section: "idle",
+                    key: "enabled",
+                    glyph: Icons.lock,
+                    title: "Lock when idle",
+                    subtitle: "Lock the screen after a while without input",
+                    available: Idle.available
+                },
+                {
+                    section: "idle",
+                    key: "minutes",
+                    glyph: Icons.lock,
+                    title: "Idle time",
+                    subtitle: "How long without input before it locks",
+                    available: Idle.available,
+                    note: Idle.ownConfig ? "Set by ~/.config/hypr/hypridle.conf" : "",
+                    choices: [
+                        { value: 1, label: "1 min" },
+                        { value: 5, label: "5 min" },
+                        { value: 10, label: "10 min" },
+                        { value: 15, label: "15 min" },
+                        { value: 30, label: "30 min" },
+                        { value: 60, label: "1 hour" }
+                    ]
+                }
+            ]
+        },
+        {
             title: "Windows",
             rows: [
                 {
@@ -2461,25 +2491,31 @@ Popout {
                             readonly property string moduleName: settingRow.modelData.module ?? ""
                             readonly property bool missing: settingRow.moduleName !== "" && !Config.isModuleInBar(settingRow.moduleName)
                             readonly property bool overridden: Config.isOverridden(settingRow.modelData.section, settingRow.modelData.key)
-                            readonly property bool locked: settingRow.missing || settingRow.overridden
+                            // Something outside the shell has the last word, and says so.
+                            readonly property string note: settingRow.modelData.note ?? ""
+                            readonly property bool locked: settingRow.missing || settingRow.overridden || settingRow.note !== ""
                             readonly property var current: Config.setting(settingRow.modelData.section, settingRow.modelData.key)
                             readonly property bool value: settingRow.current === true
                             // A row that names a fixed set of values draws a picker
                             // instead of a switch.
                             readonly property var choices: root.choicesOf(settingRow.modelData)
 
+                            // A row for something this machine does not have.
+                            visible: settingRow.modelData.available !== false
                             width: parent.width
                             icon: settingRow.modelData.glyph
                             // Orange for missing rather than muted: a layout that
                             // dropped the module is a misconfiguration to fix, not
                             // simply a setting someone else owns.
-                            iconColour: settingRow.missing ? Theme.orange : (settingRow.overridden ? Theme.muted : Theme.accentLight)
+                            iconColour: settingRow.missing ? Theme.orange : (settingRow.overridden || settingRow.note !== "" ? Theme.muted : Theme.accentLight)
                             title: settingRow.modelData.title
                             subtitle: {
                                 if (settingRow.missing)
                                     return `Not in your bar layout — add “${settingRow.moduleName}” to modules`;
                                 if (settingRow.overridden)
                                     return "Pinned by config.json";
+                                if (settingRow.note !== "")
+                                    return settingRow.note;
                                 return settingRow.modelData.subtitle;
                             }
 

@@ -326,6 +326,12 @@ Singleton {
                 rows: 5,
                 iconSize: 72
             },
+            idle: {
+                // Lock the screen after this long without input. services/Idle.qml
+                // turns these into hypridle's config.
+                enabled: true,
+                minutes: 10
+            },
             shortcuts: {
                 // The shortcut list, osd/ShortcutsOverlay.qml.
                 enabled: true
@@ -461,6 +467,7 @@ Singleton {
     readonly property var dock: data.dock
     readonly property var appGrid: data.appGrid
     readonly property var shortcuts: data.shortcuts
+    readonly property var idle: data.idle
     readonly property var lock: data.lock
     readonly property var greeter: data.greeter
     readonly property var power: data.power
