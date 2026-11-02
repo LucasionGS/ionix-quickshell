@@ -117,8 +117,9 @@ Singleton {
             root.load(name);
     }
 
-    function load(name) {
-        root.run(["load", name]);
+    // `here` opens it on the focused workspace rather than the next free one.
+    function load(name, here) {
+        root.run(here ? ["load", name, "--here"] : ["load", name]);
     }
 
     // `workspaceId` omitted saves the focused workspace.

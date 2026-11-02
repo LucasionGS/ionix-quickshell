@@ -6,6 +6,9 @@
 // it stays up until something is picked: there is no held Alt to let go of. Unlike
 // that one it keeps clear of the bar, whichever edge the bar is on, so the button
 // that opened it can close it again. Everything it paints comes from the theme.
+//
+// A desktop with no windows offers the saved projects that aren't open yet instead,
+// and one click fills that desktop with the project.
 
 import QtQuick
 import Quickshell
@@ -27,8 +30,14 @@ PanelWindow {
     readonly property var windows: Windows.toplevels.filter(t => t.workspace?.id === root.activeId && t.monitor?.name === root.modelData.name)
     readonly property var desktops: Hyprland.workspaces.values.filter(w => w.id > 0 && w.monitor?.name === root.modelData.name).sort((a, b) => a.id - b.id)
 
-    // The keyboard's card, an index into `windows`.
+    // An open project is already on the strip, under its label.
+    readonly property var projects: Projects.available ? Projects.list.filter(p => Projects.workspaceFor(p.name) === null) : []
+    readonly property bool offering: root.windows.length === 0 && root.projects.length > 0
+
+    // The keyboard's card, an index into `windows`, or `projects` while offering them.
     property int selection: 0
+
+    onOfferingChanged: root.selection = 0
 
     // Changing workspace hands Hyprland's keyboard focus to a window there, past even
     // an exclusive layer, and it stays there: Escape would reach that window instead.
@@ -97,6 +106,10 @@ PanelWindow {
     // Narrows when there are more workspaces than the strip holds at full width.
     readonly property int tileWidth: Math.min(180, Math.floor((root.areaWidth - Theme.sp4 * root.desktops.length) / (root.desktops.length + 1)))
 
+    readonly property int projectWidth: 220
+    readonly property int projectHeight: 112
+    readonly property int projectColumns: Math.max(1, Math.min(root.projects.length, Math.floor((root.areaWidth + Theme.sp4) / (root.projectWidth + Theme.sp4))))
+
     WlrLayershell.namespace: "ionix-taskview"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: root.showing && !root.regrabbing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
@@ -127,11 +140,18 @@ PanelWindow {
         // The strip's miniatures read each window's position, which the toplevel
         // list only carries once asked for.
         Hyprland.refreshToplevels();
+        Projects.refresh();
         Qt.callLater(() => keys.forceActiveFocus());
     }
 
     function pick(toplevel) {
         Windows.activate(toplevel);
+        TaskView.close();
+    }
+
+    // On this desktop even if it carries a label, which an ordinary load would avoid.
+    function openProject(project) {
+        Projects.load(project.name, true);
         TaskView.close();
     }
 
@@ -159,8 +179,8 @@ PanelWindow {
         focus: true
 
         Keys.onPressed: event => {
-            const count = root.windows.length;
-            const columns = root.fit.columns;
+            const count = root.offering ? root.projects.length : root.windows.length;
+            const columns = root.offering ? root.projectColumns : root.fit.columns;
             let next = root.selection;
             switch (event.key) {
             case Qt.Key_Escape:
@@ -169,7 +189,10 @@ PanelWindow {
             case Qt.Key_Return:
             case Qt.Key_Enter:
             case Qt.Key_Space:
-                if (root.windows[root.selection])
+                if (root.offering) {
+                    if (root.projects[root.selection])
+                        root.openProject(root.projects[root.selection]);
+                } else if (root.windows[root.selection])
                     root.pick(root.windows[root.selection]);
                 break;
             case Qt.Key_Left:
@@ -276,14 +299,145 @@ PanelWindow {
             }
         }
 
-        Text {
+        // ── Nothing open ────────────────────────────────────────────────────
+        Column {
+            id: emptyState
             x: (parent.width - width) / 2
             y: root.edgeGap + (root.areaHeight - height) / 2
             visible: root.windows.length === 0
-            text: "No open windows on this desktop"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fsXl
-            color: Theme.muted
+            spacing: Theme.sp5
+
+            Column {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.sp2
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "No open windows on this desktop"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fsXl
+                    color: Theme.muted
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: root.offering
+                    text: "Open a project here"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fsMd
+                    color: Theme.textBright
+                }
+            }
+
+            // Scrolls only once there are more projects than the screen holds. Left
+            // alone otherwise, so a click beside the tiles still closes the overlay.
+            Flickable {
+                id: projectScroll
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: root.offering
+                width: projectGrid.width
+                height: Math.min(projectGrid.height, Math.max(root.projectHeight, root.areaHeight - 90))
+                contentWidth: projectGrid.width
+                contentHeight: projectGrid.height
+                interactive: contentHeight > height
+                clip: true
+
+                Grid {
+                    id: projectGrid
+                    columns: root.projectColumns
+                    spacing: Theme.sp4
+
+                    Repeater {
+                        model: root.showing ? root.projects : []
+
+                        delegate: Rectangle {
+                            id: project
+                            required property var modelData
+                            required property int index
+                            readonly property bool selected: project.index === root.selection && root.offering
+                            readonly property var icons: Projects.iconsFor(project.modelData, 4).filter(path => path !== "")
+
+                            width: root.projectWidth
+                            height: root.projectHeight
+                            radius: Theme.rPanel
+                            color: projectMouse.containsMouse ? Theme.subtleHover : Theme.controlFill
+                            border.width: project.selected ? 2 : 1
+                            border.color: project.selected ? Theme.accentBright : Theme.controlStroke
+
+                            onSelectedChanged: {
+                                if (project.selected)
+                                    projectScroll.contentY = Math.max(Math.min(projectScroll.contentY, project.y), project.y + project.height - projectScroll.height);
+                            }
+
+                            Row {
+                                x: (project.width - width) / 2
+                                y: Theme.sp4
+                                height: 32
+                                spacing: Theme.sp2
+
+                                Repeater {
+                                    model: project.icons
+
+                                    delegate: IconImage {
+                                        required property var modelData
+
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 32
+                                        height: 32
+                                        source: modelData
+                                        asynchronous: true
+                                    }
+                                }
+
+                                // No app it saved has an icon to show.
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: project.icons.length === 0
+                                    text: Icons.project
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fsIconLg
+                                    color: Theme.accentLight
+                                }
+                            }
+
+                            Column {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.margins: Theme.sp3
+                                spacing: Theme.sp1
+
+                                Text {
+                                    width: parent.width
+                                    elide: Text.ElideRight
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: project.modelData.name
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fsMd
+                                    color: Theme.textBright
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    elide: Text.ElideRight
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: project.modelData.windows === 1 ? "1 window" : `${project.modelData.windows} windows`
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fsSm
+                                    color: Theme.muted
+                                }
+                            }
+
+                            MouseArea {
+                                id: projectMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.openProject(project.modelData)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // ── Desktops ────────────────────────────────────────────────────────
