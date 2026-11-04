@@ -330,7 +330,14 @@ Singleton {
                 // Lock the screen after this long without input. services/Idle.qml
                 // turns these into hypridle's config.
                 enabled: true,
-                minutes: 10
+                minutes: 10,
+                // Turn the screens down while the lock screen sits without input:
+                // a backlight through brightnessctl, a monitor through ddcutil
+                // (DDC/CI). Any lock, not only the idle one. Seconds since the
+                // last input on it, and the fraction of the brightness kept.
+                dim: true,
+                dimAfter: 60,
+                dimLevel: 0.1
             },
             shortcuts: {
                 // The shortcut list, osd/ShortcutsOverlay.qml.

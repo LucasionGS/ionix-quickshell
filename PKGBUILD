@@ -44,6 +44,7 @@ depends=(
 optdepends=(
     'swaync: notification centre integration for the bell module'
     'brightnessctl: backlight control and brightness OSD'
+    'ddcutil: dim external monitors over DDC/CI while the lock screen is idle'
     'pavucontrol: advanced audio settings from the audio popout'
     'blueman: bluetooth manager GUI fallback'
     'nm-connection-editor: advanced network settings from the network popout'

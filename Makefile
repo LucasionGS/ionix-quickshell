@@ -27,6 +27,7 @@ install:
 	install -Dm755 bin/ionix-calendar   $(BINDIR)/ionix-calendar
 	install -Dm755 bin/ionix-lock       $(BINDIR)/ionix-lock
 	install -Dm755 bin/ionix-idle       $(BINDIR)/ionix-idle
+	install -Dm755 bin/ionix-dim        $(BINDIR)/ionix-dim
 	install -Dm755 bin/ionix-greeter    $(BINDIR)/ionix-greeter
 	install -Dm755 bin/ionix-greeter-sync $(BINDIR)/ionix-greeter-sync
 	install -Dm644 systemd/ionix-quickshell.service $(UNITDIR)/ionix-quickshell.service
@@ -38,7 +39,7 @@ uninstall:
 	rm -f $(BINDIR)/ionix-shell-qs $(BINDIR)/ionix-shell-fork $(BINDIR)/ionix-calendar $(BINDIR)/ionix-lock $(BINDIR)/ionix-greeter $(BINDIR)/ionix-greeter-sync
 	rm -f $(UNITDIR)/ionix-quickshell.service
 	rm -rf $(UNITDIR)/hypridle.service.d
-	rm -f $(BINDIR)/ionix-idle
+	rm -f $(BINDIR)/ionix-idle $(BINDIR)/ionix-dim
 	rm -rf $(LICDIR)
 
 # qmlformat screws with formatting where it shouldn't, do not run this.

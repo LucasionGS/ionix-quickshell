@@ -83,7 +83,7 @@ ShellRoot {
         target: "lock"
 
         function status(): string {
-            return `secure=${lock.secure} awake=${LockState.awake} phase=${LockState.phase} fingerprint=${LockState.fingerprintAvailable}`;
+            return `secure=${lock.secure} awake=${LockState.awake} dimmed=${LockState.dimmed} phase=${LockState.phase} fingerprint=${LockState.fingerprintAvailable}`;
         }
         // For a keybind that should blank straight to the screensaver.
         function sleep(): void {

@@ -25,8 +25,15 @@ state="$runtime/ionix-lock.state"
 exec 9>"$runtime/ionix-lock.lock"
 flock -n 9 || exit 0
 
+# Undo a dim lock.qml left behind (bin/ionix-dim). Its helper restores by itself
+# when the lock process goes, but not when it was killed along with it.
+undim() {
+    command -v ionix-dim >/dev/null && ionix-dim restore &>/dev/null
+}
+
 fallback() {
     echo "ionix-lock: $1 — falling back to hyprlock" >&2
+    undim
     if command -v hyprlock >/dev/null; then
         # Held fd 9 goes with it, so the flock above still covers hyprlock.
         exec hyprlock -c /etc/hypr/hyprlock.conf
@@ -59,6 +66,7 @@ for _ in $(seq 80); do
         # The session-start lock is the login prompt, not something locking.
         [[ -n "${IONIX_LOCK_SILENT:-}" ]] || ionix-sounds play lock &>/dev/null &
         wait "$pid"
+        undim
         # lock.qml ends itself with SIGTERM once it has released the lock, so
         # the exit status says nothing; the state file does.
         if [[ "$(cat "$state" 2>/dev/null)" == unlocked* ]]; then

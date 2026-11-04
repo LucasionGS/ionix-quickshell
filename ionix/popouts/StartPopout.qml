@@ -364,6 +364,28 @@ Popout {
                         { value: 30, label: "30 min" },
                         { value: 60, label: "1 hour" }
                     ]
+                },
+                {
+                    section: "idle",
+                    key: "dim",
+                    glyph: Icons.brightness,
+                    title: "Dim while locked",
+                    subtitle: "Turn the screens down when the lock screen sits idle",
+                    note: Idle.dimmableScreens === 0 ? "No backlight here, and no monitor answers ddcutil" : ""
+                },
+                {
+                    section: "idle",
+                    key: "dimAfter",
+                    glyph: Icons.brightness,
+                    title: "Dim after",
+                    subtitle: "How long the lock screen waits for input first",
+                    note: Idle.dimmableScreens === 0 ? "No screen here can be dimmed" : "",
+                    choices: [
+                        { value: 30, label: "30 s" },
+                        { value: 60, label: "1 min" },
+                        { value: 120, label: "2 min" },
+                        { value: 300, label: "5 min" }
+                    ]
                 }
             ]
         },

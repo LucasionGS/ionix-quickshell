@@ -39,6 +39,31 @@ Singleton {
         }
     }
 
+    // How many screens the lock can dim (bin/ionix-dim). -1 until known, so the
+    // settings rows don't claim there are none while ddcutil is still looking.
+    property int dimmableScreens: -1
+
+    // Asked again when a monitor comes or goes, since DDC/CI is per monitor.
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            dimProbe.running = true;
+        }
+    }
+
+    Process {
+        id: dimProbe
+        running: true
+        // Example:
+        // backlight intel_backlight
+        // ddc 4
+        command: ["sh", "-c", "command -v ionix-dim >/dev/null && ionix-dim status"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.dimmableScreens = this.text.trim() === "" ? 0 : this.text.trim().split("\n").length
+        }
+    }
+
     Process {
         running: true
         // Example:

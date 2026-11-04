@@ -253,6 +253,11 @@ reads the same merged config, so it wears the active theme and restyles live whi
 - **Screensaver:** after `lock.screensaver.after` idle seconds the card fades out, the blur clears,
   stills slowly pan and zoom, and the clock moves to the middle and wanders once a minute. Any key or
   mouse movement brings the card back, and the key you pressed still counts as typed.
+- **Dimming:** after `idle.dimAfter` seconds without input (default 60; *Dim while locked* and *Dim after*
+  on the settings page) every screen that can be dimmed drops to `idle.dimLevel` (0.1) of its brightness:
+  a backlight through `brightnessctl`, an external monitor over DDC/CI through `ddcutil`. The next input
+  or the unlock puts back exactly what was there. `ionix-dim hold 0.1` / `ionix-dim restore` /
+  `ionix-dim status` do the same from a terminal.
 - **Unlock:** password through PAM, raced against fprintd when a reader is present — the same
   "either works, never blocks the other" behaviour hyprlock has. Media controls, battery and
   suspend/restart/shut down (the last two need a second click) are available while locked.

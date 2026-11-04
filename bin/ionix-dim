@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+###############################################
+# ionix-dim — dim the screens, then undo it   #
+###############################################
+#
+# The lock screen runs `ionix-dim hold <FRACTION>` once it has gone a while
+# without input, and stops it on the next key, mouse movement or unlock. `hold`
+# dims every screen that can be dimmed, waits, and puts back exactly what was
+# there when it is stopped (SIGTERM) or its stdin closes, so a lock process that
+# dies takes the dim with it.
+#
+# Two kinds of screen can dim: a backlight the kernel exposes (laptop panels,
+# through brightnessctl, which asks logind), and a monitor that speaks DDC/CI
+# (through ddcutil, whose package loads i2c-dev and gives the session its i2c
+# devices). Anything else stays as it is.
+#
+# Each screen's brightness before the dim is written to a state file under
+# $XDG_RUNTIME_DIR, and `restore` puts it back from there. ionix-lock runs that
+# after the lock process has gone, which covers a holder that was killed outright.
+
+IONIX_DIM_VERSION="1.0.0"
+BRIGHTNESSCTL="${BRIGHTNESSCTL:-brightnessctl}"
+DDCUTIL="${DDCUTIL:-ddcutil}"
+STATE_DIR="${IONIX_DIM_STATE_DIR:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ionix-dim}"
+STATE="$STATE_DIR/state"
+LOCK="$STATE_DIR/lock"
+PID_FILE="$STATE_DIR/pid"
+# The backlight fades down over about a second; coming back is one step.
+FADE_STEPS=12
+FADE_STEP_SECONDS=0.08
+# DDC/CI's brightness feature
+VCP_BRIGHTNESS=10
+
+# Print usage
+usage() {
+  cat <<EOF
+Usage: ionix-dim <command>
+
+  hold <FRACTION>  Dim every screen to this fraction of its brightness until stopped
+  restore          Put back what a dim changed, stopping any running hold
+  status           List the screens that can be dimmed
+  help             Show this help
+  version          Show the version
+
+Run "ionix-dim help <command>" for more information on a command.
+EOF
+}
+
+# Print usage for one command
+usage_command() {
+  case "$1" in
+    hold)
+      cat <<EOF
+Dim every screen that can be dimmed to FRACTION (0.01 to 0.99) of its current
+brightness, then wait. SIGTERM, SIGINT or the end of stdin puts it back.
+
+Usage: ionix-dim hold <FRACTION>
+EOF
+      ;;
+    restore)
+      cat <<EOF
+Stop a running hold, then put back any brightness a dim left changed. Does
+nothing when no screen is dimmed.
+
+Usage: ionix-dim restore
+EOF
+      ;;
+    status)
+      cat <<EOF
+Print one line per screen that can be dimmed: "backlight <device>" or
+"ddc <i2c bus>". Prints nothing when there are none.
+
+Usage: ionix-dim status
+EOF
+      ;;
+    *)
+      usage
+      ;;
+  esac
+}
+
+#region Screens
+
+# Print "name current max" for each backlight
+backlight_list() {
+  command -v "$BRIGHTNESSCTL" &>/dev/null || return 0
+  # Example:
+  # intel_backlight,backlight,19393,20%,96000
+  "$BRIGHTNESSCTL" -l -c backlight -m 2>/dev/null | awk -F, 'NF >= 5 && $5 > 0 { print $1, $3, $5 }'
+}
+
+# Set backlight $1 to raw value $2
+backlight_set() {
+  "$BRIGHTNESSCTL" -q -d "$1" set "$2" &>/dev/null
+}
+
+# Print the i2c bus number of each display that answers DDC/CI
+ddc_buses() {
+  command -v "$DDCUTIL" &>/dev/null || return 0
+  # Example:
+  # Display 1
+  #    I2C bus:  /dev/i2c-4
+  # Invalid display
+  #    I2C bus:  /dev/i2c-6
+  "$DDCUTIL" detect --terse 2>/dev/null | awk '
+    /^Display/ { valid = 1 }
+    /^Invalid/ { valid = 0 }
+    valid && /I2C bus:/ { sub(/.*\/dev\/i2c-/, ""); print }
+  '
+}
+
+# Print "current max" of the brightness of the display on bus $1
+ddc_get() {
+  # Example:
+  # VCP 10 C 75 100
+  "$DDCUTIL" -b "$1" getvcp "$VCP_BRIGHTNESS" --terse 2>/dev/null | awk '$1 == "VCP" && $3 == "C" { print $4, $5 }'
+}
+
+# Set the brightness of the display on bus $1 to $2
+ddc_set() {
+  "$DDCUTIL" -b "$1" setvcp "$VCP_BRIGHTNESS" "$2" --noverify &>/dev/null
+}
+
+#endregion
+
+#region State
+
+# Print the brightness saved for screen $1 $2, if any
+state_get() {
+  [[ -f "$STATE" ]] || return 0
+  awk -v kind="$1" -v name="$2" '$1 == kind && $2 == name { print $3; exit }' "$STATE"
+}
+
+# Remember screen $1 $2's brightness $3, unless an earlier dim already did
+state_add() {
+  [[ -n "$(state_get "$1" "$2")" ]] && return 0
+  printf '%s %s %s\n' "$1" "$2" "$3" >> "$STATE"
+}
+
+# Put every saved screen back and forget them
+state_restore() {
+  [[ -f "$STATE" ]] || return 0
+  local KIND NAME VALUE
+  while read -r KIND NAME VALUE; do
+    case "$KIND" in
+      backlight) backlight_set "$NAME" "$VALUE" ;;
+      # A DDC write takes a while; every monitor at once.
+      ddc) ddc_set "$NAME" "$VALUE" & ;;
+    esac
+  done < "$STATE"
+  wait
+  rm -f "$STATE"
+}
+
+# Print round($1 * $2), at least $3 and at most $1
+dim_target() {
+  awk -v from="$1" -v f="$2" -v floor="$3" 'BEGIN {
+    t = int(from * f + 0.5)
+    if (t < floor) t = floor
+    if (t > from) t = from
+    print t
+  }'
+}
+
+#endregion
+
+#region Dimming
+
+# Dim every DDC/CI display to fraction $1
+dim_ddc() {
+  local FRACTION="$1" BUS CURRENT MAX ORIGINAL
+  for BUS in $(ddc_buses); do
+    (
+      read -r CURRENT MAX < <(ddc_get "$BUS")
+      [[ "$CURRENT" =~ ^[0-9]+$ ]] || exit 0
+      ORIGINAL="$(state_get ddc "$BUS")"
+      ORIGINAL="${ORIGINAL:-$CURRENT}"
+      state_add ddc "$BUS" "$ORIGINAL"
+      ddc_set "$BUS" "$(dim_target "$ORIGINAL" "$FRACTION" 0)"
+    ) &
+  done
+  wait
+}
+
+# Fade every backlight down to fraction $1
+dim_backlights() {
+  local FRACTION="$1" NAME CURRENT MAX ORIGINAL FLOOR STEP I
+  local -a NAMES=() FROM=() TO=()
+  while read -r NAME CURRENT MAX; do
+    ORIGINAL="$(state_get backlight "$NAME")"
+    ORIGINAL="${ORIGINAL:-$CURRENT}"
+    state_add backlight "$NAME" "$ORIGINAL"
+    # Never all the way to 0: some panels switch the backlight off there.
+    FLOOR=$(( (MAX + 99) / 100 ))
+    NAMES+=("$NAME")
+    FROM+=("$CURRENT")
+    TO+=("$(dim_target "$ORIGINAL" "$FRACTION" "$FLOOR")")
+  done < <(backlight_list)
+
+  (( ${#NAMES[@]} )) || return 0
+  for (( STEP = 1; STEP <= FADE_STEPS; STEP++ )); do
+    for I in "${!NAMES[@]}"; do
+      backlight_set "${NAMES[$I]}" $(( FROM[I] + (TO[I] - FROM[I]) * STEP / FADE_STEPS ))
+    done
+    (( STEP < FADE_STEPS )) && sleep "$FADE_STEP_SECONDS"
+  done
+}
+
+#endregion
+
+# Hold the screens dimmed until stopped
+cmd_hold() {
+  local FRACTION="${1:-}"
+  if [[ -z "$FRACTION" ]]; then
+    usage_command hold
+    return 2
+  fi
+  if [[ ! "$FRACTION" =~ ^0?\.[0-9]+$ ]] || ! awk -v f="$FRACTION" 'BEGIN { exit !(f >= 0.01 && f <= 0.99) }'; then
+    echo "Invalid fraction: $FRACTION. Must be a number from 0.01 to 0.99, like 0.1 for a tenth of the brightness." >&2
+    return 2
+  fi
+
+  mkdir -p "$STATE_DIR"
+  exec 9>"$LOCK"
+  # A restore or an earlier hold still finishing; it lets go within seconds.
+  if ! flock -w 10 9; then
+    echo "Another ionix-dim is still running. Run \"ionix-dim restore\" to stop it." >&2
+    return 1
+  fi
+  echo "$$" > "$PID_FILE"
+
+  # Stopped mid-fade or while waiting, put everything back once and leave. What
+  # is still dimming (a DDC write in flight) is killed first so none lands after.
+  local STOPPING="" DDC_GROUP=""
+  stop() {
+    [[ -n "$STOPPING" ]] && return
+    STOPPING=1
+    trap '' TERM INT
+    if [[ -n "$DDC_GROUP" ]]; then
+      # The whole group at once, so a monitor's subshell that is forking right
+      # now cannot slip past, then give its last write a moment to end.
+      kill -TERM -- "-$DDC_GROUP" 2>/dev/null
+      for _ in {1..40}; do
+        kill -0 -- "-$DDC_GROUP" 2>/dev/null || break
+        sleep 0.05
+      done
+    fi
+    wait
+    state_restore
+    rm -f "$PID_FILE"
+    exit 0
+  }
+  trap stop TERM INT
+
+  # Its own process group (job control on for this one job), for stop() above.
+  set -m
+  dim_ddc "$FRACTION" &
+  DDC_GROUP=$!
+  set +m
+  dim_backlights "$FRACTION"
+  wait
+  DDC_GROUP=""
+
+  # `read` rather than `sleep`: bash runs a trap as soon as a builtin is
+  # interrupted, but only after an external command has finished. EOF is the
+  # lock process going away.
+  while read -r _; do :; done
+  stop
+}
+
+# Undo a dim
+cmd_restore() {
+  local PID
+  [[ -d "$STATE_DIR" ]] || return 0
+  PID="$(cat "$PID_FILE" 2>/dev/null)"
+  if [[ "$PID" =~ ^[0-9]+$ ]] && grep -qa "ionix-dim" "/proc/$PID/cmdline" 2>/dev/null; then
+    kill -TERM "$PID" 2>/dev/null
+  fi
+  exec 9>"$LOCK"
+  flock -w 10 9 || return 1
+  state_restore
+  rm -f "$PID_FILE"
+}
+
+# List the screens that can dim
+cmd_status() {
+  local NAME BUS
+  while read -r NAME _; do
+    echo "backlight $NAME"
+  done < <(backlight_list)
+  for BUS in $(ddc_buses); do
+    echo "ddc $BUS"
+  done
+}
+
+case "${1:-help}" in
+  hold)
+    cmd_hold "${2:-}"
+    ;;
+  restore)
+    cmd_restore
+    ;;
+  status)
+    cmd_status
+    ;;
+  help|-h|--help)
+    if [[ -n "${2:-}" ]]; then usage_command "$2"; else usage; fi
+    ;;
+  version|-v|--version)
+    printf 'ionix-dim %s\n' "$IONIX_DIM_VERSION"
+    ;;
+  *)
+    echo "Command not found: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+exit $?

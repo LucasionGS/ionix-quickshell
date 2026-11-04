@@ -69,6 +69,9 @@ Singleton {
         root.awake = true;
         if (root.idleAfter > 0)
             idleTimer.restart();
+        root.dimmed = false;
+        if (root.dimAfter > 0)
+            dimTimer.restart();
     }
 
     Timer {
@@ -82,6 +85,43 @@ Singleton {
             else
                 root.awake = false;
         }
+    }
+
+    // ── Dimming ─────────────────────────────────────────────────────────────
+    //
+    // Longer still without input and the screens that can dim go dark: a laptop
+    // panel's backlight, a monitor over DDC/CI. bin/ionix-dim does it and holds it
+    // for as long as it runs. Stopping it (any input, or the unlock) puts back
+    // exactly what was there, and so does this process dying, because that closes
+    // its stdin. Counted from the last input like the screensaver, so with the
+    // defaults the card fades at 15 s and the screens dim at a minute.
+    readonly property int dimAfter: root.greeter || Config.idle?.dim !== true ? 0 : Math.max(5, Config.idle.dimAfter ?? 60)
+    readonly property real dimLevel: Math.min(0.99, Math.max(0.01, Config.idle?.dimLevel ?? 0.1))
+    property bool dimmed: false
+
+    onDimAfterChanged: {
+        if (root.dimAfter > 0)
+            dimTimer.restart();
+        else
+            root.dimmed = false;
+    }
+
+    Timer {
+        id: dimTimer
+        interval: Math.max(5, root.dimAfter) * 1000
+        running: root.dimAfter > 0
+        onTriggered: {
+            if (root.buffer !== "" || root.phase === "checking")
+                restart();
+            else
+                root.dimmed = true;
+        }
+    }
+
+    Process {
+        running: root.dimmed && !root.unlocked
+        stdinEnabled: true
+        command: ["ionix-dim", "hold", root.dimLevel.toFixed(2)]
     }
 
     // ── Typing ──────────────────────────────────────────────────────────────
@@ -337,6 +377,8 @@ Singleton {
         capsProbe.running = true;
         if (root.idleAfter > 0)
             idleTimer.restart();
+        if (root.dimAfter > 0)
+            dimTimer.restart();
         root.startFingerprint();
     }
 }
