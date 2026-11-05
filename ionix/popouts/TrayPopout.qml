@@ -13,6 +13,17 @@ Popout {
     readonly property var items: SystemTray.items.values
     readonly property int cell: 40
     readonly property int columns: Math.min(4, Math.max(1, root.items.length))
+    // The entry whose menu is open, so there is only ever one, and the panel knows
+    // to leave the focus grab to it.
+    property Item menuEntry: null
+
+    childGrab: root.menuEntry !== null
+    // Closed from outside (IPC, another popout) with a menu up: it must not come
+    // back with the panel next time.
+    onVisibleChanged: {
+        if (!root.visible)
+            root.menuEntry = null;
+    }
 
     panelWidth: root.columns * root.cell + Theme.sp2 * 2
     padding: Theme.sp2
@@ -26,7 +37,7 @@ Popout {
             delegate: Item {
                 id: entry
                 required property SystemTrayItem modelData
-                property bool menuOpen: false
+                readonly property bool menuOpen: root.menuEntry === entry
 
                 width: root.cell
                 height: root.cell
@@ -57,7 +68,7 @@ Popout {
                         }
                         else if (event.button === Qt.RightButton || item.onlyMenu) {
                             if (item.hasMenu)
-                                entry.menuOpen = !entry.menuOpen;
+                                root.menuEntry = entry.menuOpen ? null : entry;
                         }
                         else {
                             item.activate();
@@ -73,8 +84,13 @@ Popout {
                 TrayMenu {
                     menuHandle: entry.modelData.menu
                     anchorItem: entry
-                    shouldOpen: entry.menuOpen
-                    onDismissRequested: entry.menuOpen = false
+                    shouldOpen: entry.menuOpen && root.shouldOpen
+                    grabWindows: [root]
+                    onFinished: Popouts.close()
+                    onDismissRequested: {
+                        if (root.menuEntry === entry)
+                            root.menuEntry = null;
+                    }
                 }
 
                 Tooltip {

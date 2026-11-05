@@ -149,10 +149,19 @@ PopupWindow {
     // callers bind shouldOpen to Popouts.isOpen(...), and assigning to it would
     // overwrite that binding with a constant. The panel would then close once and
     // never reopen, because nothing re-evaluates when Popouts.current changes.
+    //
+    // childGrab is set while a menu inside holds the grab for itself and this panel
+    // (TrayMenu.grabWindows). Hyprland keeps one grab at a time, so starting the
+    // menu's clears this one, and closing on that took the menu away with the panel.
+    property bool childGrab: false
+
     HyprlandFocusGrab {
-        active: root.shouldOpen
+        active: root.shouldOpen && !root.childGrab
         windows: [root]
-        onCleared: Popouts.close()
+        onCleared: {
+            if (!root.childGrab)
+                Popouts.close();
+        }
     }
 
     GlassPanel {
@@ -201,7 +210,7 @@ PopupWindow {
 
     Shortcut {
         sequence: "Escape"
-        enabled: root.shouldOpen && !root.holdEscape
+        enabled: root.shouldOpen && !root.holdEscape && !root.childGrab
         onActivated: Popouts.close()
     }
 }

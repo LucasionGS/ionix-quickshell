@@ -31,10 +31,18 @@ PopupWindow {
     // The menu that owns the focus grab; submenus point at their ancestor.
     property var rootMenu: root
     property bool shouldOpen: false
+    // Surfaces outside the chain that stay live while it is open, such as the flyout
+    // the menu was opened from. Hyprland keeps one focus grab at a time, so the
+    // flyout gives up its own while this one covers it too (see Popout.childGrab).
+    property var grabWindows: []
 
     // Emitted when the whole chain should go away: an entry was activated, Escape
     // was pressed, or the focus grab was cleared. Always emitted on `rootMenu`.
     signal dismissRequested
+    // Emitted before dismissRequested when whatever the menu opened from should go
+    // as well: an entry was activated, or something outside the grab was clicked.
+    // Escape only closes the menu.
+    signal finished
 
     readonly property var entries: opener.children?.values ?? []
 
@@ -117,8 +125,15 @@ PopupWindow {
 
     HyprlandFocusGrab {
         active: root.shouldOpen && !root.isSubmenu
-        windows: root.windowChain
-        onCleared: root.rootMenu.dismissRequested()
+        windows: root.windowChain.concat(root.grabWindows)
+        onCleared: {
+            // The clear for a grab that was just handed on (to another tray item's
+            // menu, or back to the flyout) can land after this menu has closed.
+            if (!root.shouldOpen)
+                return;
+            root.rootMenu.finished();
+            root.rootMenu.dismissRequested();
+        }
     }
 
     Shortcut {
@@ -345,6 +360,7 @@ PopupWindow {
                                     return;
                                 }
                                 entryRow.modelData.triggered();
+                                root.rootMenu.finished();
                                 root.rootMenu.dismissRequested();
                             }
                         }
