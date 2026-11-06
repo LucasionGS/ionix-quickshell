@@ -302,6 +302,12 @@ Singleton {
                 // workspace.
                 showProjectLabels: true
             },
+            picker: {
+                // The screen-share picker, picker.qml. False shows one still per
+                // screen and icon tiles for windows, instead of one capture
+                // stream per card.
+                livePreviews: true
+            },
             dock: {
                 // The floating app dock, osd/DockWindow.qml, on any theme.
                 enabled: false,
@@ -470,6 +476,7 @@ Singleton {
     readonly property var notifications: data.notifications
     readonly property var osd: data.osd
     readonly property var windowSwitcher: data.windowSwitcher
+    readonly property var picker: data.picker
     readonly property var taskView: data.taskView
     readonly property var dock: data.dock
     readonly property var appGrid: data.appGrid

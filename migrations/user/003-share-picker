@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Screen sharing goes through the shell's own picker, ionix-share-picker. Ionix
+# used to point xdg-desktop-portal-hyprland at hyprland-preview-share-picker,
+# which the ISO never installed (so sharing failed on every new install) and
+# which cannot read Hyprland 0.57's monitor list anyway.
+#
+# xdph reads only ~/.config/hypr/xdph.conf, so this is user state. Only the line
+# Ionix wrote is changed; a picker someone chose by hand stays. A missing file
+# gets the Ionix one. xdph reads it when it starts, so it applies from the next
+# login.
+#
+# Ships with ionix-quickshell, next to ionix-share-picker, so it never runs
+# before the picker it points at is installed. Ionix's ionix-migrate runs it
+# once per user at login; off Ionix nothing does.
+
+set -euo pipefail
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/xdph.conf"
+PICKER=ionix-share-picker
+
+if [[ ! -e "$CONFIG" ]]; then
+  mkdir -p "$(dirname "$CONFIG")"
+  printf 'screencopy {\n  custom_picker_binary = %s\n}\n' "$PICKER" > "$CONFIG"
+  echo "  Screen sharing now uses the Ionix share picker ($CONFIG)"
+  exit 0
+fi
+
+# Example line: `  custom_picker_binary = hyprland-preview-share-picker`
+grep -qE '^[[:space:]]*custom_picker_binary[[:space:]]*=[[:space:]]*hyprland-preview-share-picker[[:space:]]*$' "$CONFIG" || exit 0
+# --follow-symlinks: an xdph.conf linked from a dotfiles repo stays a link.
+sed -i --follow-symlinks -E "s|^([[:space:]]*custom_picker_binary[[:space:]]*=[[:space:]]*)hyprland-preview-share-picker[[:space:]]*\$|\\1${PICKER}|" "$CONFIG"
+echo "  Screen sharing now uses the Ionix share picker ($CONFIG)"

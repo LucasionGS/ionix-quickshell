@@ -271,6 +271,25 @@ locks you out of your own desktop for ten minutes after three typos.
 
 Hyprland needs `misc.allow_session_lock_restore = true` for the hyprlock takeover to work.
 
+### Screen-share picker
+
+When Discord, a browser or OBS asks to capture the screen, xdg-desktop-portal-hyprland asks a picker
+what to share. `ionix-share-picker` is one, built from `picker.qml` (another entry point, its own
+process like the lock screen). It shows a live preview of every monitor and window, has an area tool
+for sharing part of one screen, and a *Remember this choice* switch that lets the app reshare without
+asking. Point xdph at it in `~/.config/hypr/xdph.conf`:
+
+```
+screencopy {
+  custom_picker_binary = ionix-share-picker
+}
+```
+
+xdph reads that when it starts, so log out and back in after changing it. `picker.livePreviews: false`
+in `config.json` swaps the previews for one still per screen and icon tiles. Keys: Tab switches page,
+the arrows move, Enter shares, Esc cancels. If the picker cannot start, the stock
+`hyprland-share-picker` runs instead. Its output goes to the journal: `journalctl -t ionix-share-picker`.
+
 ### Tier 2 — `user.qml` (escape hatch)
 
 If `~/.config/quickshell/ionix/user.qml` exists it is loaded into the shell. Use it to add your own

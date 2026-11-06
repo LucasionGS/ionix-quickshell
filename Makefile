@@ -13,6 +13,8 @@ SHELLDIR = $(DESTDIR)/etc/xdg/quickshell/ionix
 BINDIR   = $(DESTDIR)$(PREFIX)/bin
 UNITDIR  = $(DESTDIR)$(PREFIX)/lib/systemd/user
 LICDIR   = $(DESTDIR)$(PREFIX)/share/licenses/$(PKGNAME)
+# Run once per user at login by Ionix's ionix-migrate; inert anywhere else.
+MIGRDIR  = $(DESTDIR)$(PREFIX)/share/ionix/migrations/user
 
 .PHONY: install uninstall lint dev check
 
@@ -30,6 +32,8 @@ install:
 	install -Dm755 bin/ionix-dim        $(BINDIR)/ionix-dim
 	install -Dm755 bin/ionix-greeter    $(BINDIR)/ionix-greeter
 	install -Dm755 bin/ionix-greeter-sync $(BINDIR)/ionix-greeter-sync
+	install -Dm755 bin/ionix-share-picker $(BINDIR)/ionix-share-picker
+	install -Dm755 migrations/user/003-share-picker $(MIGRDIR)/003-share-picker
 	install -Dm644 systemd/ionix-quickshell.service $(UNITDIR)/ionix-quickshell.service
 	install -Dm644 systemd/hypridle-ionix.conf $(UNITDIR)/hypridle.service.d/ionix.conf
 	install -Dm644 LICENSE $(LICDIR)/LICENSE
@@ -39,7 +43,8 @@ uninstall:
 	rm -f $(BINDIR)/ionix-shell-qs $(BINDIR)/ionix-shell-fork $(BINDIR)/ionix-calendar $(BINDIR)/ionix-lock $(BINDIR)/ionix-greeter $(BINDIR)/ionix-greeter-sync
 	rm -f $(UNITDIR)/ionix-quickshell.service
 	rm -rf $(UNITDIR)/hypridle.service.d
-	rm -f $(BINDIR)/ionix-idle $(BINDIR)/ionix-dim
+	rm -f $(BINDIR)/ionix-idle $(BINDIR)/ionix-dim $(BINDIR)/ionix-share-picker
+	rm -f $(MIGRDIR)/003-share-picker
 	rm -rf $(LICDIR)
 
 # qmlformat screws with formatting where it shouldn't, do not run this.

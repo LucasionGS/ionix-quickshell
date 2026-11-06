@@ -60,6 +60,10 @@ Singleton {
     readonly property string history: "󰋚"
     readonly property string frequent: "󰈸"
     readonly property string window: "󰖯"
+    // Screen-share picker: a whole monitor, part of one, and sharing itself.
+    readonly property string monitor: "󰍹"
+    readonly property string region: "󰆞"
+    readonly property string screenShare: "󱒃"
     // Bar position picker — a panel drawn against each edge of a frame.
     readonly property string dockWindow: "󱂬"
     readonly property string dockTop: "󱔓"

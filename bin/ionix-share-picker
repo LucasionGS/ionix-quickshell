@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# ionix-share-picker — the screen-share picker for xdg-desktop-portal-hyprland.
+#
+# xdph runs its picker whenever an app asks to capture the screen, blocks until
+# it exits, and reads one line from its stdout. Point it here in
+# ~/.config/hypr/xdph.conf:
+#
+#   screencopy {
+#     custom_picker_binary = ionix-share-picker
+#   }
+#
+# This runs picker.qml from the shell's config tree as its own Quickshell process
+# and prints the answer it leaves behind. Quickshell's own output goes to the
+# journal (`journalctl -t ionix-share-picker`), never to stdout, where xdph looks
+# for the `[SELECTION]` line.
+#
+# If the picker cannot start at all (no picker.qml, no qs, a QML error), the
+# stock `hyprland-share-picker` is run in its place, so sharing still works.
+#
+#   --allow-token             passed by xdph; pre-ticks "Remember this choice"
+#   IONIX_PICKER_ENTRY=…      run this picker.qml instead, e.g. a checkout's
+#   IONIX_PICKER_DEV=1        hot-reload picker.qml while it is up
+
+set -u
+
+allow_token=0
+for arg in "$@"; do
+    [[ "$arg" == "--allow-token" ]] && allow_token=1
+done
+
+# Run the stock picker instead. $1 = why, the rest = xdph's own arguments.
+fallback() {
+    echo "ionix-share-picker: $1 — falling back to hyprland-share-picker" >&2
+    shift
+    # exec skips the EXIT trap, and the stock picker has no use for the logger.
+    rm -f "${out:-}"
+    { exec 3>&-; } 2>/dev/null
+    if command -v hyprland-share-picker >/dev/null; then
+        exec hyprland-share-picker "$@"
+    fi
+    echo "ionix-share-picker: hyprland-share-picker is not installed either; nothing is shared" >&2
+    exit 1
+}
+
+# The user's copy wins, the same way `qs -c ionix` resolves it (so `make dev`
+# covers the picker too); then a checkout this script sits in; then the package.
+# A config dir holding only JSON has no picker.qml and falls through.
+here="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+entry=""
+[[ -f "${IONIX_PICKER_ENTRY:-}" ]] && entry="$IONIX_PICKER_ENTRY"
+for candidate in "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/ionix/picker.qml" \
+                 "$here/../ionix/picker.qml" \
+                 /etc/xdg/quickshell/ionix/picker.qml; do
+    [[ -n "$entry" ]] && break
+    [[ -f "$candidate" ]] && entry="$(readlink -f "$candidate")"
+done
+
+[[ -n "$entry" ]] || fallback "no picker.qml found" "$@"
+command -v qs >/dev/null || fallback "quickshell is not installed" "$@"
+
+runtime="${XDG_RUNTIME_DIR:-/tmp}"
+out="$(mktemp "$runtime/ionix-share-picker.XXXXXX")" || fallback "cannot create a result file in $runtime" "$@"
+trap 'rm -f "$out"' EXIT
+
+# Quickshell's log lines go to the journal, or to stderr without one.
+if command -v systemd-cat >/dev/null; then
+    exec 3> >(systemd-cat -t ionix-share-picker)
+else
+    exec 3>&2
+fi
+
+# The monitor the user is on, where the dialog opens, and the workspace showing
+# there, whose windows are listed first. Asked here because Quickshell's
+# Hyprland.focusedMonitor starts out on the first monitor until an event
+# corrects it. Example lines: `    "id": 2,` and `    "monitor": "DP-1",`
+workspace_json="$(hyprctl activeworkspace -j 2>/dev/null)"
+monitor="$(sed -n 's/^ *"monitor": "\(.*\)",$/\1/p' <<< "$workspace_json" | head -n1)"
+workspace="$(sed -n 's/^ *"id": \(-\{0,1\}[0-9]*\),$/\1/p' <<< "$workspace_json" | head -n1)"
+
+# xdph waits for this process the whole time it is up, so a dialog left open
+# for ten minutes is given up on rather than holding the portal forever.
+IONIX_PICKER_OUT="$out" IONIX_PICKER_ALLOW_TOKEN="$allow_token" \
+IONIX_PICKER_MONITOR="$monitor" IONIX_PICKER_WORKSPACE="$workspace" \
+    timeout --signal=TERM --kill-after=5 600 qs --no-color -p "$entry" >&3 2>&3
+status=$?
+
+answer="$(head -n1 "$out" 2>/dev/null)"
+# Timed out: the user walked away, which is a no, not a broken picker.
+[[ $status -eq 124 && -z "$answer" ]] && answer="cancel"
+case "$answer" in
+    "[SELECTION]"*)
+        # Exactly one newline: xdph drops the last character of a screen name.
+        printf '%s\n' "$answer"
+        ;;
+    cancel)
+        exit 1
+        ;;
+    *)
+        # Neither an answer nor a refusal: picker.qml never got as far as asking.
+        fallback "picker.qml exited without an answer" "$@"
+        ;;
+esac
